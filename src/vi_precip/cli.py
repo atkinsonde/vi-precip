@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="run.py", description=__doc__)
     p.add_argument("--config", help="path to config.yaml (default: config/config.yaml)")
     p.add_argument("--end-date", help="override analysis.end_date (YYYY-MM-DD)")
+    p.add_argument("--domain", help="spatial domain: south_coast (default), south_vi, coastal_bc, or a .geojson path")
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -50,14 +51,24 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("brief", help="rebuild the briefing page from the metrics outputs (no downloads)")
 
-    for name in ("enso", "temperature", "site"):
-        sub.add_parser(name, help="(later milestone)")
+    ix = sub.add_parser("indices", help="download/parse climate indices (NOAA PSL, CPC RONI) and seasonal means")
+    ix.add_argument("--refresh", action="store_true", help="re-download even if the cached copy is fresh")
+    sub.add_parser("temperature", help="Tmax/Tmin/DTR period means, tiers and anomalies (no downloads)")
+    sub.add_parser("longrecord", help="long-record stations from 1950 + AHCCD cross-check")
+    h = sub.add_parser("hydro", help="river flow / lake level ranks (map domain) and natural-river series (ENSO domain)")
+    h.add_argument("--refresh", action="store_true", help="re-download the provisional (real-time) data")
+    sub.add_parser("enso", help="ENSO correspondence statistics (needs indices; uses whatever else exists)")
+    st = sub.add_parser("site", help="build the static dashboard in outputs/site/")
+    st.add_argument("--out", help="output folder (default outputs/site)")
+    al = sub.add_parser("all", help="update + temperature + indices + longrecord + hydro + enso + site")
+    al.add_argument("--refresh", action="store_true", help="also re-download indices and provisional hydrometric data")
 
     a = p.parse_args(argv)
     cfg = load_config(a.config)
     if a.end_date:
         target = dt.date.fromisoformat(a.end_date).year
         cfg = cfg.with_overrides(end_date=a.end_date, target_year=target)
+    cfg = cfg.with_domain(a.domain)
     _setup_logging(cfg, a.verbose)
 
     if a.cmd == "probe":
@@ -91,8 +102,50 @@ def main(argv: list[str] | None = None) -> int:
         for k, v in paths.items():
             print(f"  {k:22s} {v}")
         return 0
-    print(f"'{a.cmd}' arrives in a later milestone (see DESIGN.md §13).")
+    if a.cmd == "indices":
+        from . import indices
+        _show(indices.run(cfg, refresh=a.refresh))
+        return 0
+    if a.cmd == "temperature":
+        from . import temperature
+        _show(temperature.run(cfg))
+        return 0
+    if a.cmd == "longrecord":
+        from . import longrecord
+        _show(longrecord.run(cfg))
+        return 0
+    if a.cmd == "hydro":
+        from . import hydro
+        _show(hydro.run(cfg, refresh_recent=a.refresh))
+        return 0
+    if a.cmd == "enso":
+        from . import enso_stats
+        _show(enso_stats.run(cfg))
+        return 0
+    if a.cmd == "site":
+        from . import site
+        site.run(cfg, out=a.out)
+        return 0
+    if a.cmd == "all":
+        from . import enso_stats, hydro, indices, longrecord, site, temperature
+        paths = pipeline.run_inventory(cfg, refresh_recent=True)
+        paths |= pipeline.run_metrics(cfg)
+        paths |= temperature.run(cfg)
+        for name, fn in (("indices", lambda: indices.run(cfg, refresh=a.refresh)), ("longrecord", lambda: longrecord.run(cfg)),
+                         ("hydro", lambda: hydro.run(cfg, refresh_recent=a.refresh)), ("enso", lambda: enso_stats.run(cfg))):
+            try:
+                paths |= fn()
+            except (Exception, SystemExit) as ex:  # one failed source should not stop the rest
+                logging.getLogger("vi_precip").error("stage %s failed: %s", name, ex)
+        site.run(cfg)
+        return 0
     return 2
+
+
+def _show(paths: dict) -> None:
+    print("\nOutputs:")
+    for k, v in paths.items():
+        print(f"  {k:22s} {v}")
 
 
 if __name__ == "__main__":

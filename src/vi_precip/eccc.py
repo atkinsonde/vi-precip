@@ -219,8 +219,13 @@ class ECCCClient:
     # -------------------------------------------------------------- stations
     def get_stations(self, refresh: bool = False) -> pd.DataFrame:
         """Raw station metadata for the domain bbox (cached)."""
-        path = self.cache / "stations_raw.parquet"
-        meta = self.cache / "stations_raw.json"
+        tag = "_".join(f"{x:g}" for x in self.cfg.domain["bbox"]).replace("-", "m")
+        legacy = self.cache / "stations_raw.parquet"
+        path = self.cache / f"stations_raw_{tag}.parquet"
+        meta = self.cache / f"stations_raw_{tag}.json"
+        if not path.exists() and legacy.exists() and (self.cache / "stations_raw.json").exists() \
+                and list(self.cfg.domain["bbox"]) == [-128.8, 48.2, -121.3, 51.05]:
+            path, meta = legacy, self.cache / "stations_raw.json"  # cache written by milestone 1
         if path.exists() and meta.exists() and not refresh:
             fetched = dt.datetime.fromisoformat(json.loads(meta.read_text())["fetched"])
             if dt.datetime.now() - fetched < dt.timedelta(days=self.station_cache_days):

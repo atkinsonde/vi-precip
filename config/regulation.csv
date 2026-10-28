@@ -1,0 +1,23 @@
+pattern,status,note
+COWICHAN RIVER,regulated,Lake Cowichan weir (Zenodo stn_hyd_reg list: 08HA002 and 08HA011 regulated)
+COWICHAN LAKE,regulated,lake level held by the weir
+HARRIS CREEK,natural,Zenodo stn_hyd_reg list: 08HA070 unregulated
+RENFREW CREEK,natural,Zenodo stn_hyd_reg list: 08HA069 unregulated
+PUNTLEDGE,regulated,BC Hydro Comox Lake dam
+COMOX LAKE,regulated,BC Hydro storage
+ENGLISHMAN RIVER,regulated,Arrowsmith Lake dam releases
+ARROWSMITH,regulated,storage reservoir
+NANAIMO RIVER,regulated,Jump Lake dam (South Nanaimo); check tributary gauges
+SOOKE RIVER,regulated,Sooke Lake reservoir (CRD water supply)
+SOOKE LAKE,regulated,CRD water-supply reservoir
+GOLDSTREAM,regulated,CRD reservoirs upstream
+SOMASS,regulated,Great Central Lake / Sproat Lake storage
+STAMP RIVER,regulated,Great Central Lake storage
+ASH RIVER,regulated,Elsie Lake storage (Zenodo list: 08HB023 regulated)
+GREAT CENTRAL LAKE,regulated,storage
+CAMPBELL RIVER AT,regulated,BC Hydro system (station on the Campbell River itself)
+BUTTLE LAKE,regulated,BC Hydro Strathcona dam reservoir
+WOKAS LAKE,regulated,BC Hydro Quinsam diversion storage
+JUMP CREEK,natural,gauge is above the Jump Lake dam (confirmed)
+QUINSAM,regulated,diversion; check
+LITTLE QUALICUM,regulated,Cameron Lake outlet control (confirmed)

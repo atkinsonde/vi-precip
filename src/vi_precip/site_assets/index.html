@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/plotly.min.js"></script>
+<script src="data/meta.js"></script>
+<script src="data/precip.js"></script>
+<script src="data/temp.js"></script>
+<script src="data/water.js"></script>
+<script src="data/enso.js"></script>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1 id="title">{{TITLE}}</h1>
+    <div class="sub" id="vintage"></div>
+  </div>
+  <div class="spacer"></div>
+  <button id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
+</header>
+<nav class="tabs" aria-label="Sections"><div class="inner">
+  <a href="#summary" data-tab="summary">Summary</a>
+  <a href="#maps" data-tab="maps">Maps</a>
+  <a href="#stations" data-tab="stations">Stations</a>
+  <a href="#water" data-tab="water">Rivers &amp; lakes</a>
+  <a href="#coherence" data-tab="coherence">Coherence<span class="tech">tech</span></a>
+  <a href="#enso" data-tab="enso">ENSO<span class="tech">tech</span></a>
+  <a href="#methods" data-tab="methods">Methods &amp; data</a>
+</div></nav>
+<main>
+  <div id="synthetic"></div>
+
+  <section class="tab" id="tab-summary">
+    <p class="lead" id="sum-lead"></p>
+    <div class="tiles" id="sum-tiles"></div>
+    <div class="grid2">
+      <div class="card">
+        <h3 id="sum-map-title">Precipitation compared with normal</h3>
+        <div class="legend" id="sum-map-legend"></div>
+        <div class="plot map" id="sum-map"></div>
+        <p class="note">Each dot is a weather station with a long enough record. Hover for details; click to open the station.</p>
+      </div>
+      <div class="card">
+        <h3>Rain since September 1</h3>
+        <div class="controls"><label>Station <select id="sum-st"></select></label></div>
+        <div class="plot tall" id="sum-cum"></div>
+        <p class="note" id="sum-cum-note"></p>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h3>Is El Niño to blame?</h3>
+      <div id="sum-enso" class="result"></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-maps">
+    <div class="controls">
+      <label>Show <select id="m-var"></select></label>
+      <label>Measure <select id="m-metric"></select></label>
+      <label id="m-thr-wrap">Wet day ≥ <select id="m-thr"></select></label>
+      <label>Statistic <select id="m-stat"></select></label>
+    </div>
+    <div class="grid2">
+      <div class="card"><div class="legend" id="m-legend"></div><div class="plot map" id="m-map"></div></div>
+      <div class="card"><h3 id="m-list-title"></h3><div class="plot tall" id="m-bars"></div></div>
+    </div>
+    <h3>Table</h3>
+    <div class="tablewrap" id="m-table"></div>
+  </section>
+
+  <section class="tab" id="tab-stations">
+    <div class="controls">
+      <label>Station <select id="s-st"></select></label>
+      <label>Series <select id="s-metric"></select></label>
+      <label>Wet day ≥ <select id="s-thr"></select></label>
+    </div>
+    <div id="s-info" class="note"></div>
+    <div class="grid2e">
+      <div class="card"><h3>Accumulated since Sep 1</h3><div class="plot tall" id="s-cum"></div></div>
+      <div class="card"><h3 id="s-series-title">Year by year</h3><div class="plot tall" id="s-series"></div></div>
+    </div>
+    <div class="grid2e" style="margin-top:16px">
+      <div class="card"><h3>Daily precipitation this autumn</h3><div class="plot short" id="s-daily"></div>
+        <p class="note">Grey bars: multi-day accumulations (several days reported as one total; the amount is shown on the reporting day).</p></div>
+      <div class="card"><h3>Temperature, year by year</h3><div class="plot short" id="s-temp"></div></div>
+    </div>
+    <h3>All measures for this station</h3>
+    <div class="tablewrap" id="s-table"></div>
+  </section>
+
+  <section class="tab" id="tab-water">
+    <p class="lead" id="w-lead"></p>
+    <div class="controls">
+      <label>Period <select id="w-per"></select></label>
+      <label>Ranked since <select id="w-base"></select></label>
+      <label><input type="checkbox" id="w-reg" checked> include regulated sites</label>
+    </div>
+    <div class="grid2">
+      <div class="card"><div class="legend" id="w-legend"></div><div class="plot map" id="w-map"></div>
+        <p class="note">Circles: river flow. Squares: lake or river level. Thick outline: flow regulated by a dam, weir or diversion.
+          Other gauge sites might be influenced by the presence of a dam or weir.</p></div>
+      <div class="card"><h3>Ranked list</h3><div class="plot tall" id="w-bars"></div></div>
+    </div>
+    <h3>Table</h3>
+    <div class="tablewrap" id="w-table"></div>
+    <p class="note" id="w-fig"></p>
+  </section>
+
+  <section class="tab" id="tab-coherence">
+    <p class="note">How consistent is the dryness from place to place, and is it fewer wet days or less rain per wet day?</p>
+    <div class="controls">
+      <label>Measure <select id="c-metric"></select></label>
+      <label>Wet day ≥ <select id="c-thr"></select></label>
+    </div>
+    <div class="grid2e">
+      <div class="card"><h3>By region (% of median)</h3><div class="plot tall" id="c-region"></div></div>
+      <div class="card"><h3>How many stations ranked 1st, 2nd, … driest</h3><div class="plot tall" id="c-rank"></div></div>
+    </div>
+    <div class="grid2e" style="margin-top:16px">
+      <div class="card"><h3>Frequency or intensity? (log anomalies, Sep 1–end)</h3><div class="plot tall" id="c-ni"></div>
+        <p class="note">ln(P/P̄) = ln(N/N̄) + ln(I/Ī): total = wet-day count term + wet-day intensity term. Left of zero: fewer wet
+          days than usual; below zero: less rain per wet day. Dotted lines join points with the same total anomaly (0, −0.5, −1, −1.5).</p></div>
+      <div class="card"><h3>Regional summary</h3><div class="tablewrap" id="c-table"></div></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-enso">
+    <div id="e-primary" class="card"></div>
+    <div class="controls">
+      <label>Record <select id="e-rec"></select></label>
+      <label>Region <select id="e-region"></select></label>
+      <label>Measure <select id="e-metric"></select></label>
+      <label>Index <select id="e-index"></select></label>
+      <label>Season <select id="e-season"></select></label>
+    </div>
+    <div class="grid2e">
+      <div class="card"><h3 id="e-sc-title">Scatter</h3><div class="plot tall" id="e-scatter"></div><div class="note" id="e-sc-note"></div></div>
+      <div class="card"><h3>Correlation by index and season</h3><div class="plot tall" id="e-heat"></div>
+        <p class="note">Spearman ρ of the detrended series, years before the target year. ✱ = Benjamini–Hochberg q ≤ 0.10 across all
+          <span id="e-ntests"></span> tests in the grid; · = uncorrected p ≤ 0.05 only.</p></div>
+    </div>
+    <div class="card" style="margin-top:16px"><h3>Year by year</h3><div class="plot short" id="e-ts-y"></div><div class="plot short" id="e-ts-x"></div></div>
+    <div class="grid2e" style="margin-top:16px">
+      <div class="card"><h3>Composites by ENSO phase</h3><div class="plot" id="e-comp"></div><div class="note" id="e-comp-note"></div></div>
+      <div class="card"><h3>Regressions (primary index and season)</h3><div class="tablewrap" id="e-reg"></div>
+        <p class="note">PDO⊥ = PDO with the part explained by ENSO removed, so the ENSO coefficient keeps its meaning. If the ENSO coefficient
+          shrinks when PNA is added, the atmospheric PNA pattern is how ENSO reaches the coast.</p></div>
+    </div>
+    <div class="grid2e" style="margin-top:16px">
+      <div class="card"><h3>Station by station</h3><div class="legend" id="e-map-legend"></div><div class="plot map" id="e-map"></div>
+        <div class="note" id="e-map-note"></div></div>
+      <div class="card"><h3>Analogue years</h3><div class="tablewrap" id="e-analog"></div>
+        <h3>Homogenised data check (AHCCD)</h3><div class="tablewrap" id="e-ahccd"></div>
+        <p class="note">October correlation with the primary index from Adjusted and Homogenized Canadian Climate Data (whole October)
+          against the raw station record (Oct 1–end) at the same site.</p></div>
+    </div>
+  </section>
+
+  <section class="tab methods" id="tab-methods">
+    <h2>Data</h2>
+    <ul>
+      <li>Daily precipitation and temperature: Environment and Climate Change Canada (ECCC), MSC GeoMet OGC API,
+        <code>climate-daily</code> and <code>climate-stations</code> collections (api.weather.gc.ca).</li>
+      <li>Homogenised monthly data (cross-check): ECCC Adjusted and Homogenized Canadian Climate Data (AHCCD), <code>ahccd-monthly</code>.</li>
+      <li>River flow and water level: Water Survey of Canada. Approved daily means (HYDAT) from the Water Office <code>daily_data</code>
+        service; provisional daily means from <code>real_time_data</code>. Provisional data can change.</li>
+      <li>Climate indices: NOAA PSL (Niño 3.4, Niño 3, Niño 4, ONI, SOI, PNA, PDO, MEI.v2), NOAA CPC relative Niño 3.4 (RONI).</li>
+    </ul>
+    <h2>Precipitation</h2>
+    <ul>
+      <li>Target period: September 1 to the end date; the same calendar dates are used in every year. Normal = 2000–2025 (the
+        target year is never part of its own reference).</li>
+      <li>A period total counts if no more than 2 days are missing. Multi-day accumulations (flag A, and the "C" days that precede them)
+        count fully in totals but not in day-by-day measures. Trace (T) = 0 mm.</li>
+      <li>Stations: Tier 1 ≥ 22 valid reference years, Tier 2 ≥ 12, both with a valid target period. Stations whose ID changed at the same
+        site are joined into composites only after an overlap check.</li>
+      <li>Wet day ≥ 1.0 mm (primary) or ≥ 0.2 mm (sensitivity). Accumulation blocks above the threshold are split with an unbiased
+        wet-day estimator.</li>
+      <li>Ranks are among the reference years plus the target year ("3rd driest of 27" = only two drier years since 2000).
+        Return periods: empirical, and from a gamma fit with a mixed zero (bootstrap interval).</li>
+      <li>Driest N-day period: the lowest running N-day total that starts on or after Sep 1 and ends by the end date.</li>
+    </ul>
+    <h2>Temperature</h2>
+    <ul><li>Period means of daily max, min and range. A period counts with ≤ 5 missing days per 30 and ≤ 3 in a row. Only composites
+      without a temperature step are joined.</li></ul>
+    <h2>Rivers and lakes</h2>
+    <ul>
+      <li>Mean flow (or level for lakes) over the period, ranked against all years with ≤ 2 missing days since the stated year.</li>
+      <li>Regulation is assigned from a reviewed list; unlisted sites are marked "not checked".</li>
+      <li>ENSO analysis uses only natural rivers: Reference Hydrometric Basin Network gauges plus reviewed unregulated gauges.</li>
+    </ul>
+    <h2>ENSO correspondence</h2>
+    <ul>
+      <li>Every station series is converted to rank-based normal scores; regional series are the mean score, re-scored.</li>
+      <li>Primary test, fixed in advance: Vancouver Island Sep 1–end precipitation against Jul–Sep Niño 3.4, one-sided (El Niño → drier),
+        linear trends removed, Spearman correlation, permutation p-value. Repeated on the long record (1950 onward) as a check.</li>
+      <li>All other combinations (seasons × indices × measures × records) are exploratory and controlled with Benjamini–Hochberg FDR.
+        Station maps use the Wilks (2016) field-significance rule.</li>
+      <li>Composites: El Niño / neutral / La Niña years by <span id="class-rule">ONI JAS ± 0.5 °C</span>.</li>
+      <li>A correlation is not a forecast: with about 26 years even a real ENSO effect of modest size may not reach significance, and a
+        significant one explains only part of any single year.</li>
+    </ul>
+    <h2>Downloads</h2>
+    <div id="downloads"></div>
+    <h2>Build</h2>
+    <div id="buildinfo" class="kv"></div>
+  </section>
+</main>
+<footer>
+  Data: Environment and Climate Change Canada; Water Survey of Canada; NOAA PSL/CPC. Provisional data are subject to revision.
+  Analysis code: vi-precip. <span id="foot-built"></span>
+</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

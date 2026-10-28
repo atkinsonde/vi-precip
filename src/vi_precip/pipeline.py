@@ -37,7 +37,9 @@ def domain_stations(cfg: Config, client: ECCCClient, refresh: bool = False) -> p
     raw = client.get_stations(refresh=refresh)
     st = standardize_stations(raw)
     st = filter_province(raw, st, cfg.domain["province"])
-    st = domain.add_regions(st, cfg.path("region_overrides"))
+    from .spatial import add_regions
+
+    st = add_regions(st, cfg.spatial, cfg.path("region_overrides"))
     log.info("%d stations in domain (%s)", len(st), st["region"].value_counts().to_dict())
     return st
 
@@ -248,7 +250,7 @@ def run_inventory(
     basemap = load_basemap(cfg)
     bbox = tuple(cfg.domain["bbox"])
     plot_inv = inv.copy()
-    plot_inv["region"] = pd.Categorical(plot_inv["region"], categories=domain.REGIONS, ordered=True)
+    plot_inv["region"] = pd.Categorical(plot_inv["region"], categories=cfg.spatial.region_names, ordered=True)
     with_data = plot_inv[plot_inv["api_has_daily"]]
     f = cfg.figures_dir
     paths["map"] = invplots.station_map(
@@ -269,7 +271,7 @@ def _print_summary(inv, cand, prop, comp, cfg, client) -> None:
     print("\n=== Inventory summary ===")
     print(f"Stations in domain: {len(inv)}; with daily data in the API since {cfg.download_start.year}: {len(d)}")
     tab = pd.crosstab(d["region"].astype(str), d["tier"]).reindex(columns=[1, 2, 3], fill_value=0)
-    tab = tab.reindex([r for r in domain.REGIONS if r in tab.index])
+    tab = tab.reindex([r for r in cfg.spatial.region_names if r in tab.index])
     print(tab.to_string())
     if len(cand):
         print(f"Composite candidate pairs: {len(cand)} ({(cand['suggestion'] == 'join').sum()} join, "

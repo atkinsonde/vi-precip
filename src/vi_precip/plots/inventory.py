@@ -109,7 +109,8 @@ def station_map(inv: pd.DataFrame, proposals: pd.DataFrame, basemap, bbox, path:
 def region_check(inv: pd.DataFrame, basemap, bbox, path: Path) -> Path:
     """Small multiples: one panel per region, its stations highlighted. For checking assignment."""
     style.apply()
-    regs = [r for r in domain.REGIONS if (inv["region"] == r).any()]
+    regs = [r for r in (list(inv["region"].cat.categories) if hasattr(inv["region"], "cat") else domain.REGIONS)
+            if (inv["region"] == r).any()]
     ncol = 4
     nrow = int(np.ceil(len(regs) / ncol))
     fig, axes = plt.subplots(nrow, ncol, figsize=(16, 2.6 * nrow + 0.5), squeeze=False)

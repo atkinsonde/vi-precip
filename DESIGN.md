@@ -315,6 +315,23 @@ distribution.
 
 **Station maps** of correlations use Wilks (2016) FDR field significance.
 
+**As implemented (`enso_stats.py`, milestone 4)** — differences from the plan above:
+- Seasons are JJA, JAS, AS and S (the end date falls in October, so ASO/SO would use
+  months after the period). ONI/RONI have JJA and JAS only.
+- Responses are rank-based normal scores (per station, then regional mean re-scored),
+  not gamma SPI; this treats precipitation, temperature and river flow the same way.
+- The secondary grid is larger than planned: 7 precipitation measures, 6 temperature
+  measures and 2 river-flow measures × 8 indices × 4 seasons × 3 records. BH FDR is taken
+  over the whole grid, so it is conservative.
+- Regressions use OLS t-tests on undetrended scores (needed to predict the target year);
+  the permutation, detrended test is the correlation. A fourth model, ENSO + PNA, is reported
+  only as a mediation check (does the ENSO coefficient shrink?), not as competing causes.
+- The target year is never used to fit; it is compared with the fitted expectation and a
+  90 % prediction interval, with conditional and unconditional return periods.
+- Rivers: natural gauges only (RHBN + `hydro.reviewed_natural`, minus anything regulated
+  in `config/regulation.csv` and lakes), ENSO domain coastal BC, ≥ 30 years.
+- Open: Sen's slope / Mann–Kendall context (§10) is not implemented yet.
+
 ## 10. Trend and normals
 
 - Sen's slope with a Mann–Kendall p-value per station and metric (baseline period),
@@ -332,23 +349,23 @@ distribution.
 - regional indices by year;
 - ENSO test results.
 
-**Website**: a static folder uploaded to web.uvic.ca with Cyberduck. It needs no
-server and no build step.
+**Website** (`site.py`, `run.py site`): a static folder uploaded to web.uvic.ca with
+Cyberduck. It needs no server and no build step, and also opens from disk.
 
 ```
-site/
-  index.html          vanilla JS; tabs: Map · Station · Coherence · Dry spells · ENSO · Methods
-  lib/plotly.min.js   vendored (a partial cartesian bundle if sufficient)
-  data/*.json         precomputed metrics for every option combination
-  data/daily/<id>.json  lazy-loaded per station
-  geo/coast.geojson   vendored coastline; no tile server dependency
-  figures/*.png       static report figures
-  methods.html        definitions, thresholds, data vintage
+outputs/site/
+  index.html             tabs: Summary (public) · Maps · Stations · Rivers & lakes · Coherence · ENSO · Methods
+  assets/app.js, style.css
+  assets/plotly.min.js   copied from the installed plotly package (full bundle; no CDN)
+  data/*.js              precomputed data as JS globals (fetch() of JSON fails on file://)
+  data/stations/<id>.js  lazy-loaded per station (series + cumulative curves)
+  data/csv/*.csv         download tables
+  figures/*.png          print maps and briefing figures
 ```
 
-Options (threshold, window, anomaly type, index, season) select among
-*precomputed* results. The JavaScript does no metric computation, so there is only
-one implementation of each metric.
+Maps are Plotly cartesian lon/lat plots over simplified Natural Earth land (no tiles,
+no topojson download). Options select among *precomputed* results; the JavaScript only
+selects, sorts and fits a one-predictor least-squares line for the ENSO scatter.
 
 ## 12. Updating
 
@@ -363,13 +380,14 @@ one implementation of each metric.
 | # | Content | Status |
 |---|---|---|
 | 1 | Skeleton, ECCC client and cache, probe and smoke test, inventory, completeness, tiers, composite candidates, inventory maps and timeline | done |
-| 2 | Accepted composites applied; standardized dataset; precipitation metrics (totals, bins, decomposition, spells, events, onset); anomalies; threshold step test; quick-look map | **this commit** |
-| 2b | Driest 30/45-day period (search Sep 1 → end date, each year its own minimum); Oct 1–end as headline period; self-contained briefing page (`run.py brief`) | **this commit** |
-| 3 | Pairwise homogeneity (replaces neighbour-mean test), regional indices, EOFs, coherence figures, anomaly maps | |
-| 4 | Long record (AHCCD + raw), climate indices, ENSO tests and regressions | |
-| 5 | Temperature module (Tmax, Tmin, DTR) | |
-| 6 | Static website build | |
-| 7 | PCIC adapter | |
+| 2 | Accepted composites applied; standardized dataset; precipitation metrics (totals, bins, decomposition, spells, events, onset); anomalies; threshold step test; quick-look map | done |
+| 2b | Driest 30/45-day period (search Sep 1 → end date, each year its own minimum); Oct 1–end as headline period; self-contained briefing page (`run.py brief`) | done |
+| 2c | Spatial domains (`spatial.py`: presets or GeoJSON, used by every fetch); hydrometric module (ranks map + natural rivers) | done |
+| 3 | Pairwise homogeneity (replaces neighbour-mean test), EOFs | coherence tab done; EOFs/pairwise open |
+| 4 | Long record (AHCCD + raw), climate indices, ENSO tests and regressions | done |
+| 5 | Temperature module (Tmax, Tmin, DTR) | done |
+| 6 | Static website build | done |
+| 7 | PCIC adapter; interactive domain selector (writes a GeoJSON for `--domain`) | |
 
 ## 14. Findings from the inventory, and open items
 

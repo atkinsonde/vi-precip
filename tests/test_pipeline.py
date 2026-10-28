@@ -70,3 +70,29 @@ def test_metrics_end_to_end(cfg):
     assert pat.loc["1100031", "unc_runs_followed_by_acc"] == pat.loc["1100031", "n_unc_runs"] > 0
     assert paths["breaks"].exists() and paths["map_window"].exists()
     assert paths["brief"].exists() and "driest30_mm__rank_dry" in wide
+
+
+def test_temperature_stage(cfg):
+    from vi_precip import temperature
+
+    pipeline.run_inventory(cfg, client=ECCCClient(cfg, session=FakeSession()))
+    paths = temperature.run(cfg)
+    an = pd.read_csv(paths["temperature_anomalies"], dtype={"unit_id": str})
+    assert {"tmax", "tmin", "dtr"} <= set(an["var"])
+    units = pd.read_csv(paths["temperature_units"], dtype={"unit_id": str})
+    assert "C_1021830" not in set(units["unit_id"])  # Comox composite not in temperature.composites
+    assert (an["n_years"] <= len(cfg.baseline_years) + 1).all()
+
+
+def test_longrecord_stage(cfg):
+    from vi_precip import longrecord
+
+    s = FakeSession()
+    pipeline.run_inventory(cfg, client=ECCCClient(cfg, session=s))
+    paths = longrecord.run(cfg, client=ECCCClient(cfg, session=s))
+    lp = pd.read_parquet(paths["long_precip"])
+    assert "L_GONZALES" in set(lp["unit_id"]) and lp["year"].min() == 1950
+    g = lp[(lp["unit_id"] == "L_GONZALES") & lp["valid_total_window"].astype(bool)]
+    assert g["year"].min() == 1990  # fake data start
+    ah = pd.read_parquet(paths["long_ahccd"])
+    assert set(ah["month"]) == {9, 10} and ah["unit_id"].iloc[0] == "L_GONZALES"

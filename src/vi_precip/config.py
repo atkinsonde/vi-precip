@@ -108,6 +108,18 @@ class Config:
         return self.raw["domain"]
 
     @property
+    def spatial(self):
+        """The spatial Domain (preset or GeoJSON); see spatial.py."""
+        if "_spatial" not in self.__dict__:
+            from .spatial import get_domain
+
+            spec = self.raw["domain"].get("spec", "south_coast")
+            if spec and not spec in ("south_coast", "south_vi", "coastal_bc") and not Path(spec).is_absolute():
+                spec = str(self.root / spec)
+            self.__dict__["_spatial"] = get_domain(spec)
+        return self.__dict__["_spatial"]
+
+    @property
     def eccc(self) -> dict[str, Any]:
         return self.raw["eccc"]
 
@@ -157,12 +169,28 @@ class Config:
             raw["analysis"][k] = v
         return Config(raw=raw, root=self.root)
 
+    def with_domain(self, spec: str | None) -> "Config":
+        """Return a copy using another spatial domain; the station-query bbox follows it."""
+        import copy
+
+        if not spec:
+            return self
+        raw = copy.deepcopy(self.raw)
+        raw["domain"]["spec"] = spec
+        cfg = Config(raw=raw, root=self.root)
+        if spec != "south_coast":
+            cfg.raw["domain"]["bbox"] = cfg.spatial.bbox
+        return cfg
+
 
 def load_config(path: str | Path | None = None, root: str | Path | None = None) -> Config:
     path = Path(path) if path else DEFAULT_CONFIG
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
     cfg = Config(raw=raw, root=Path(root) if root else PROJECT_ROOT)
+    spec = raw.get("domain", {}).get("spec")
+    if spec and spec != "south_coast":
+        cfg.raw["domain"]["bbox"] = cfg.spatial.bbox
     _validate(cfg)
     return cfg
 

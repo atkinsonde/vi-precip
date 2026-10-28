@@ -56,7 +56,7 @@ def _img(path: Path) -> str:
     return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
 
 
-def regional_table(fin: pd.DataFrame) -> pd.DataFrame:
+def regional_table(fin: pd.DataFrame, regions: list[str] | None = None) -> pd.DataFrame:
     g = fin.groupby("region", observed=True)
     reg = pd.DataFrame({
         "n": g.size(),
@@ -66,7 +66,7 @@ def regional_table(fin: pd.DataFrame) -> pd.DataFrame:
         "driest30": g["driest30_mm__pct_of_median"].median() if "driest30_mm__pct_of_median" in fin else np.nan,
         "oct_top3": g["total_oct__rank_dry"].apply(lambda r: int((r <= 3).sum())),
     })
-    order = [r for r in domain.REGIONS if r in reg.index]
+    order = [r for r in (regions or domain.REGIONS) if r in reg.index]
     reg = reg.loc[order]
     reg.index = [REGION_LABEL.get(r, r) for r in reg.index]
     reg.index.name = "region"
@@ -85,7 +85,7 @@ def run_brief(cfg: Config) -> Path:
     for c in ("driest30_start", "driest30_end", "driest45_start", "driest45_end"):
         if c in tgt:
             wide[c] = wide["unit_id"].map(tgt[c])
-    wide["region"] = pd.Categorical(wide["region"], categories=domain.REGIONS, ordered=True)
+    wide["region"] = pd.Categorical(wide["region"], categories=cfg.spatial.region_names, ordered=True)
     fin = wide[wide["status"] == "final"].copy()
     prov = wide[wide["status"] == "provisional"].copy()
     out = cfg.out_dir / "brief"
@@ -109,7 +109,7 @@ def run_brief(cfg: Config) -> Path:
         if f"{metric}__pctl" in mw and mw[f"{metric}__pctl"].notna().any():
             maps[metric] = anomplots.percentile_map(mw, metric, basemap, bbox, figs / f"map_{metric}.png", title,
                                                     label_col=f"{metric}__pct_of_median")
-    reg = regional_table(fin)
+    reg = regional_table(fin, cfg.spatial.region_names)
     bars = briefplots.regional_bars(reg, figs / "regional_bars.png", end)
 
     want = [str(s) for s in cfg.raw.get("brief", {}).get("stations", [])]

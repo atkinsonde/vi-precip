@@ -118,17 +118,19 @@ def _fetch_zip(url: str, dest: Path) -> dict[str, bytes]:
     return files
 
 
-def load_basemap(cfg: Config, pad: float = 1.0) -> dict[str, list] | None:
-    """Return {'land': [rings], 'coast': [lines]} for the domain bbox (padded), or None."""
+def load_basemap(cfg: Config, pad: float = 1.0, bbox: list[float] | None = None) -> dict[str, list] | None:
+    """Return {'land': [rings], 'coast': [lines]} for a bbox (default: the domain's; padded), or None."""
     bm = cfg.basemap
     if not bm.get("enabled", False):
         return None
     d = cfg.data_dir / "geo"
     d.mkdir(parents=True, exist_ok=True)
-    cache = d / "basemap_domain.json"
+    x0, y0, x1, y1 = bbox or cfg.domain["bbox"]
+    default = [round(v, 2) for v in (x0, y0, x1, y1)] == [-128.8, 48.2, -121.3, 51.05]
+    tag = "domain" if default else "_".join(f"{v:g}" for v in (x0, y0, x1, y1)).replace("-", "m")
+    cache = d / f"basemap_{tag}.json"
     if cache.exists():
         return json.loads(cache.read_text())
-    x0, y0, x1, y1 = cfg.domain["bbox"]
     bbox = (x0 - pad, y0 - pad, x1 + pad, y1 + pad)
     try:
         land = _parts_in_bbox(_fetch_zip(bm["land_url"], d / "ne_10m_land.zip"), bbox, "polygon")

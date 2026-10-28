@@ -20,12 +20,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+site = ["plotly>=5"]
 
 [project.scripts]
 vi-precip = "vi_precip.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+vi_precip = ["site_assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

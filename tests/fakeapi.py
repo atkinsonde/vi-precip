@@ -121,6 +121,8 @@ class FakeSession:
         pass
 
     def _daily_for(self, cid):
+        if not any(s[0] == cid for s in STATIONS):
+            return []
         if cid not in self._daily:
             s = next(s for s in STATIONS if s[0] == cid)
             self._daily[cid] = _daily_records(cid, dt.date.fromisoformat(s[5]), dt.date.fromisoformat(s[6]))
@@ -166,6 +168,19 @@ class FakeSession:
             if q.get("sortby", "").startswith("-"):
                 recs = list(reversed(recs))
             feats = [{"type": "Feature", "geometry": None, "properties": dict(r)} for r in recs]
+            return self._page(feats, q, path)
+        if path == "/collections/ahccd-stations/items":
+            feats = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-123.33, 48.41]},
+                      "properties": {"station_id__id_station": "1018611", "station_name__nom_station": "VICTORIA GONZALES"}}]
+            return self._page(feats, q, path)
+        if path == "/collections/ahccd-monthly/items":
+            rng = np.random.default_rng(5)
+            feats = [{"type": "Feature", "geometry": None, "properties": {
+                "station_id__id_station": "1018611", "date": f"{y}-{m:02d}",
+                "total_precip__precip_totale": round(float(rng.gamma(2, 40)), 1),
+                "temp_max__temp_max": round(float(14 + rng.normal(0, 1)), 1),
+                "temp_min__temp_min": round(float(7 + rng.normal(0, 1)), 1)}}
+                for y in range(1950, 2020) for m in (9, 10)]
             return self._page(feats, q, path)
         return FakeResponse(404, {"description": "not found"}, full)
 

@@ -68,6 +68,9 @@ composites:
   switch_rule: newer            # newer member takes over from its first valid day
 
 domain:
+  # Spatial domain: south_coast (default), south_vi, coastal_bc, or a path to a .geojson polygon file.
+  # For anything but south_coast the bbox below is replaced by the domain's own bounding box.
+  spec: south_coast
   # Bounding box for the API station query (lon_min, lat_min, lon_max, lat_max);
   # stations are then assigned to region polygons in domain.py; outside all polygons => dropped.
   bbox: [-128.8, 48.2, -121.3, 51.05]
@@ -93,3 +96,44 @@ paths:
   outputs: outputs
   region_overrides: config/region_overrides.csv
   composites_accepted: config/composites.csv
+
+temperature:
+  composites: [C_1018610]       # only joins without a temperature step (airport ID changes showed 0.2-1.1 C steps)
+
+long_record:
+  start_year: 1950              # stations: see longrecord.DEFAULT_STATIONS (override here with the same structure)
+
+indices:
+  max_age_days: 7               # re-download index files older than this
+  # sources: {nino34: "https://..."}   # override any URL; a file dropped in data/raw/indices/<name>.txt is used as is
+
+hydro:
+  map_domain: south_vi          # public rank map (any domain spec, incl. a .geojson path)
+  enso_domain: coastal_bc       # natural rivers for the ENSO analysis
+  baseline_start: 1985          # ranks on the public map are "since" this year
+  min_years_map: 10
+  min_years_enso: 30
+  enso_start: 1950
+  exclude: {08HB084: "Puntledge below the diversion"}
+  # Reviewed unregulated south-Island gauges used for ENSO in addition to RHBN stations
+  reviewed_natural: [08HA001, 08HA003, 08HA010, 08HA016, 08HA068, 08HA069, 08HA070, 08HA072, 08HB008,
+                     08HB011, 08HB014, 08HB025, 08HB032, 08HB041, 08HB048, 08HB074, 08HB075, 08HB086]
+  pause_s: 0.4
+
+enso:
+  # Pre-registered primary test (do not change after seeing results)
+  primary_index: nino34
+  primary_season: JAS
+  primary_metric: total_window
+  primary_region: island
+  class_index: oni              # El Nino / La Nina composites
+  class_season: JAS
+  class_threshold: 0.5
+  n_perm: 9999
+  n_boot: 1000
+  alpha: 0.05
+  min_units_short: 5
+  min_units_long: 3
+  min_units_river: 5
+  min_years_station: 15
+  min_years_long: 30
