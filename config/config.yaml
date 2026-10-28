@@ -1,0 +1,76 @@
+# Vancouver Island / South Coast autumn dryness analysis — configuration.
+# Paths are relative to the project root. See DESIGN.md for the reasoning behind each setting.
+
+analysis:
+  target_year: 2026
+  end_date: "2026-10-26"        # last day of the target period; its month-day is used for every year
+  baseline: [2000, 2025]        # inclusive; target year is always excluded from fitted/reference stats
+  window_start: "09-01"         # primary window: Sep 1 .. end month-day
+  extended_start: "08-01"       # continuous series for spells/events/onset
+  download_start: "2000-01-01"  # earliest date fetched for the inventory stage
+  long_record_start: 1950       # used in milestone 4
+
+thresholds:
+  wet_mm: [1.0, 0.2]            # first value is primary; all values are computed
+
+completeness:
+  totals_max_missing_days: 2    # a period total is valid with at most this many missing days
+  daily_max_missing_days: 5     # daily-distribution metrics valid with at most this many missing days (window)
+  tier1_min_baseline_years: 22
+  tier2_min_baseline_years: 12
+
+qc:
+  # ECCC flag -> status. Statuses: missing, trace, accumulated, estimated, uncertain, incomplete.
+  # Anything not listed becomes "unknown" (kept as valid, counted, and reported).
+  flag_status:
+    M: missing
+    T: trace
+    A: accumulated
+    F: accumulated              # accumulated and estimated
+    E: estimated
+    C: uncertain                # precipitation occurred, amount uncertain
+    L: uncertain                # precipitation may or may not have occurred
+    "^": incomplete             # value based on incomplete data
+  # status -> treatment: valid | invalid. ("accumulated" is always handled as a block; "trace" -> 0 mm valid.)
+  status_treatment:
+    estimated: valid
+    uncertain: valid
+    incomplete: valid           # revisit after inventory (DESIGN.md §4.2)
+    unknown: valid
+
+composites:
+  join_max_km: 1.0
+  join_max_dz_m: 20
+  review_max_km: 5.0
+  review_max_dz_m: 50
+  max_overlap_years: 3          # longer concurrent overlap => "parallel"
+  max_gap_years: 2
+  min_overlap_days_for_stats: 30
+  switch_rule: newer            # newer member takes over from its first valid day
+
+domain:
+  # Bounding box for the API station query (lon_min, lat_min, lon_max, lat_max);
+  # stations are then assigned to region polygons in domain.py; outside all polygons => dropped.
+  bbox: [-128.8, 48.2, -121.3, 51.05]
+  province: BC
+
+eccc:
+  base_url: "https://api.weather.gc.ca"
+  page_limit: 10000
+  request_pause_s: 0.25         # politeness delay between requests
+  timeout_s: 120
+  max_retries: 5
+  final_after_days: 60          # a cached year is final if fetched this long after the year ended
+  station_cache_days: 30        # re-download station metadata after this many days
+
+basemap:
+  # Natural Earth 10 m; downloaded once into data/geo/. Set enabled: false to skip.
+  enabled: true
+  land_url: "https://naciscdn.org/naturalearth/10m/physical/ne_10m_land.zip"
+  coast_url: "https://naciscdn.org/naturalearth/10m/physical/ne_10m_coastline.zip"
+
+paths:
+  data: data
+  outputs: outputs
+  region_overrides: config/region_overrides.csv
+  composites_accepted: config/composites.csv
