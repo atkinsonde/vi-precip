@@ -52,9 +52,12 @@ Smaller options:
 
 ## The dashboard
 
-`outputs/site/` is a self-contained folder: upload the whole folder (Cyberduck: drag `site`
-into `public_html/`, or rename it, e.g. `autumn2026`) and open `.../site/index.html`. It also
-works opened straight from disk. Plotly is bundled in `assets/`; nothing loads from a CDN.
+`outputs/site/` is a self-contained folder of static files. Everything is computed on your own
+machine; the web server only serves the files. To publish on UVic web hosting: connect Cyberduck by
+SFTP to `web.uvic.ca` (NetLink ID + Duo), then drag `site` into the `www` folder (rename it if you like,
+e.g. `autumn2026`). To update later, use Cyberduck's Synchronize (upload only) on the same folder, so
+only changed files go up. The site also works opened straight from disk. Plotly is bundled in
+`assets/`; nothing loads from a CDN.
 
 - Summary (public): headline numbers, a % of normal map, rain since Sep 1, and a plain-language
   ENSO paragraph generated from the test results.
