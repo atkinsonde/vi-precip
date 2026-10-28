@@ -3,9 +3,12 @@
 Autumn 2026 dryness on Vancouver Island and the South Coast, compared with
 2000–2025 and examined against ENSO. The methodology is in [DESIGN.md](DESIGN.md).
 
-**Status: milestone 1.** This milestone covers the ECCC client and cache, an API
-probe, a single-station smoke test, and the station inventory. The inventory stage
-produces completeness tables, tiers, composite candidates, and inventory figures.
+**Status: milestone 2.**
+- **Milestone 1** covers the ECCC client and cache, an API probe, a single-station
+  smoke test, and the station inventory.
+- **Milestone 2** adds analysis units (stations plus accepted composites),
+  precipitation metrics, 2026 anomalies, neighbour-based homogeneity checks, and a
+  quick-look anomaly map.
 
 ## Setup
 
@@ -26,27 +29,34 @@ This needs Python 3.10 or newer. All commands below run from the project folder.
 | 2 | `python run.py smoke --name GONZALES` | Runs one station end to end for the last two seasons: download, QC, completeness, and a plot. Uses `--station <climate id>` or `--name <substring>`; with neither, it picks a long-running East VI station. | < 1 min |
 | 3 | `python run.py inventory --max-stations 5` | A quick partial inventory, to check the whole stage before the full run. | 1–2 min |
 | 4 | `python run.py inventory` | The full inventory. The first run downloads everything; later runs read the cache. | several min first time |
+| 5 | `python run.py metrics` | Builds units, metrics, anomalies and homogeneity tests from the cached data. It makes no downloads. | a few min |
 
 Smaller options:
 
 - `--end-date 2026-10-31` overrides the analysis end date for one run without
   editing the config.
-- `python run.py update` refreshes recent data and rebuilds. A cached year is
-  re-downloaded only until 60 days after that year ends, because ECCC revises
-  recent values.
+- `python run.py update` refreshes recent data, then reruns the inventory and
+  metrics. A cached year is re-downloaded only until 60 days after that year ends,
+  because ECCC revises recent values. Late-reporting staffed stations move from
+  provisional to final as their data arrive.
 - `-v` gives verbose logging. A full log of every run is always written to
   `outputs/logs/`.
 
-## What to send back after step 4
+## What to send back after step 5
 
-- `outputs/diagnostics/api_probe.json`
-- `outputs/diagnostics/precip_flag_counts.csv`
-- `outputs/tables/station_inventory.csv`
-- `outputs/tables/composite_candidates.csv`
-- `outputs/tables/composites_proposed.csv`
-- `outputs/figures/station_map_candidates.png`
-- `outputs/figures/station_timeline.png`
-- `outputs/figures/station_regions_check.png`
+- `outputs/tables/anomalies_2026.csv`: one row per unit, with the headline numbers.
+- `outputs/tables/units.csv`
+- `outputs/diagnostics/homogeneity_breaks.csv`
+- `outputs/diagnostics/accumulation_patterns.csv`
+- `outputs/figures/quicklook_2026_window_total.png`
+- The console summary printed at the end of the run (paste it or save it).
+
+The remaining tables stay on your machine:
+- `metrics_unit_year`: every metric by unit, year and threshold.
+- `bins_unit_year`
+- `dry_spells`: one row per spell.
+- `anomalies_2026_long`: every metric with rank, percentile, % of median, SPI and
+  return periods.
 
 ## Files you edit
 
@@ -67,11 +77,16 @@ src/vi_precip/
   domain.py        region polygons and assignment
   qc.py            flags, accumulation blocks, period validity, completeness, tiers
   composites.py    candidate detection, proposals, series splicing
+  units.py         analysis units (stations + accepted composites), tiers, provisional checks
+  metrics.py       day states, totals, wet days, bins, decomposition, spells, events, onset
+  anomalies.py     ranks, plotting positions, % of median, SPI and return periods
+  homogeneity.py   neighbour difference series, Pettitt and switch-year tests
   geo.py           Natural Earth basemap (downloaded once, clipped, cached)
-  pipeline.py      stages: probe, smoke, inventory
+  pipeline.py      stages: probe, smoke, inventory, metrics
   plots/           figures
 data/raw/          API cache: one parquet per station-year, plus manifests (never edited)
 data/interim/      standardized daily series and the inventory
+data/processed/    annotated daily series per analysis unit
 outputs/           tables, figures, diagnostics, logs
 tests/             offline tests; fakeapi.py imitates the ECCC API
 ```

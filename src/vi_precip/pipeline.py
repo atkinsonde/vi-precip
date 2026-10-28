@@ -260,7 +260,7 @@ def run_inventory(
     paths["timeline"] = invplots.timeline(comp, plot_inv, cfg.target_year, f / "station_timeline.png")
 
     _print_summary(inv, cand, prop, comp, cfg, client)
-    _write_vintage(cfg, client)
+    _write_vintage(cfg, client.base)
     return paths
 
 
@@ -285,12 +285,116 @@ def _print_summary(inv, cand, prop, comp, cfg, client) -> None:
     print(f"HTTP requests this run: {client.n_requests}")
 
 
-def _write_vintage(cfg: Config, client: ECCCClient) -> None:
+def _write_vintage(cfg: Config, source: str) -> None:
     v = {
         "built": dt.datetime.now().isoformat(timespec="seconds"),
         "end_date": cfg.end_date.isoformat(),
         "target_year": cfg.target_year,
         "baseline": list(cfg.baseline),
-        "source": client.base,
+        "source": source,
     }
     (cfg.out_dir / "data_vintage.json").write_text(json.dumps(v, indent=2))
+
+
+# ------------------------------------------------------------------- metrics
+def run_metrics(cfg: Config, n_boot: int = 1000) -> dict[str, Path]:
+    """Milestone 2: units (with accepted composites), metrics, anomalies, homogeneity checks."""
+    from . import anomalies, homogeneity, metrics, units as units_mod
+    from .plots import anomaly as anomplots
+
+    inv_path = cfg.data_dir / "interim" / "station_inventory.parquet"
+    if not inv_path.exists():
+        raise SystemExit("Run `python run.py inventory` first.")
+    inv = pd.read_parquet(inv_path)
+    inv["region"] = inv["region"].astype(str)
+
+    # Accumulation-encoding diagnostics from the standardized daily data
+    rules = qc.FlagRules.from_config(cfg)
+    diag = []
+    for cid in inv.loc[inv["api_has_daily"].astype(bool), "climate_id"]:
+        p = cfg.data_dir / "interim" / "daily" / f"{cid}.parquet"
+        if p.exists():
+            d = pd.read_parquet(p)
+            diag.append({"climate_id": cid, **qc.accumulation_patterns(d, rules)})
+    diag_df = pd.DataFrame(diag)
+
+    units, annotated, comp = units_mod.build_units(cfg, inv)
+    proc = cfg.data_dir / "processed" / "daily"
+    proc.mkdir(parents=True, exist_ok=True)
+    for uid, a in annotated.items():
+        a.drop(columns=[c for c in ("precip_flag", "tmax_flag", "tmin_flag", "climate_id") if c in a]).to_parquet(
+            proc / f"{uid}.parquet")
+
+    mrows, brows, srows = [], [], []
+    todo = units[units["status"] != "insufficient"]["unit_id"].tolist()
+    # Tier 3 units with any baseline data still get metrics (for context and maps), not anomalies.
+    todo += units[(units["status"] == "insufficient") & (units["n_baseline_valid_total"].fillna(0) > 0)]["unit_id"].tolist()
+    for uid in todo:
+        m, b, s = metrics.unit_metrics(uid, annotated[uid], comp[comp["unit_id"] == uid], cfg)
+        mrows.append(m)
+        brows.append(b)
+        srows.append(s)
+    met = pd.concat(mrows, ignore_index=True)
+    bins = pd.concat(brows, ignore_index=True)
+    spells = pd.concat(srows, ignore_index=True)
+
+    anom = anomalies.anomalies(met, units, cfg, n_boot=n_boot)
+    wide = anomalies.wide_summary(anom, cfg)
+    brk, dser = homogeneity.run(units, annotated, cfg)
+    brk_sum = homogeneity.summarize(brk)
+
+    t = cfg.tables_dir
+    meta = units[["unit_id", "name", "region", "lon", "lat", "elev_m", "tier", "status"]]
+    paths = {
+        "units": _save(units, t / "units.csv"),
+        "completeness_units": _save(comp, t / "completeness_unit_year.csv"),
+        "metrics": _save(meta.merge(met, on="unit_id"), t / "metrics_unit_year.csv"),
+        "bins": _save(bins, t / "bins_unit_year.csv"),
+        "spells": _save(spells, t / "dry_spells.csv"),
+        "anomalies_long": _save(anom, t / f"anomalies_{cfg.target_year}_long.csv"),
+        "anomalies": _save(wide, t / f"anomalies_{cfg.target_year}.csv"),
+        "breaks": _save(brk, cfg.diagnostics_dir / "homogeneity_breaks.csv", parquet=False),
+        "break_series": _save(dser, cfg.diagnostics_dir / "homogeneity_series.csv", parquet=False),
+        "accumulation_patterns": _save(diag_df, cfg.diagnostics_dir / "accumulation_patterns.csv", parquet=False),
+    }
+    basemap = load_basemap(cfg)
+    if len(wide):
+        wide = wide.copy()
+        paths["map_window"] = anomplots.percentile_map(
+            wide, "total_window", basemap, tuple(cfg.domain["bbox"]),
+            cfg.figures_dir / f"quicklook_{cfg.target_year}_window_total.png",
+            f"Sep 1–{cfg.end_date:%b %d} {cfg.target_year} precipitation vs 2000–2025 "
+            f"(label: % of baseline median)", label_col="total_window__pct_of_median")
+    _print_metrics_summary(units, wide, brk_sum, diag_df, cfg)
+    _write_vintage(cfg, cfg.eccc["base_url"])
+    return paths
+
+
+def _print_metrics_summary(units, wide, brk_sum, diag, cfg) -> None:
+    print("\n=== Units ===")
+    print(pd.crosstab(units["region"].astype(str), units["status"]).to_string())
+    prov = units[units["status"] == "provisional"]
+    if len(prov):
+        print("\nProvisional (late reports): missing target days / of which a neighbour had ≥1 mm")
+        for _, r in prov.iterrows():
+            print(f"  {r['name'][:34]:34s} {int(r['prov_missing_days'] or 0):3d} / "
+                  f"{'' if pd.isna(r['prov_missing_days_nbr_wet']) else int(r['prov_missing_days_nbr_wet'])}")
+    if len(wide):
+        fin = wide[wide["status"] == "final"]
+        print(f"\n=== {cfg.target_year} window total (Sep 1–{cfg.end_date:%b %d}), final units ===")
+        cols = ["name", "region", "total_window__value", "total_window__pct_of_median", "total_window__rank_dry",
+                "total_window__n_years", "total_window__spi"]
+        print(fin[cols].round(1).to_string(index=False))
+        by = fin.groupby("region")["total_window__pct_of_median"].median().round(0)
+        print("\nMedian % of baseline median by region:", by.to_dict())
+    if len(brk_sum):
+        print("\n=== Homogeneity: Pettitt breaks in wet-day frequency vs neighbours (p<0.05) ===")
+        print(brk_sum.to_string(index=False))
+    if len(diag) and "n_unc_days" in diag:
+        d = diag[diag["n_unc_days"] > 0]
+        if len(d):
+            print(f"\nC-flag days: {int(d['n_unc_days'].sum())} total; value NaN={int(d.get('unc_value_nan', 0).sum())}, "
+                  f"zero={int(d.get('unc_value_zero', 0).sum())}, positive={int(d.get('unc_value_pos', 0).sum())}; "
+                  f"C runs followed by A: {int(d['unc_runs_followed_by_acc'].sum())}/{int(d['n_unc_runs'].sum())}")
+            wd = [int(diag.get(f"acc_on_{k}", pd.Series([0])).sum()) for k in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")]
+            print(f"Accumulated-total days by weekday Mon..Sun: {wd}")

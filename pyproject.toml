@@ -15,6 +15,7 @@ dependencies = [
   "pyyaml>=6",
   "matplotlib>=3.7",
   "pyshp>=2.3",
+  "scipy>=1.10",
 ]
 
 [project.optional-dependencies]

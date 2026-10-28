@@ -29,6 +29,7 @@ class FlagRules:
     flag_status: dict[str, str]
     status_treatment: dict[str, str]
     max_accum_days: int = MAX_ACCUM_DAYS_DEFAULT
+    absorb_uncertain: bool = True
 
     @classmethod
     def from_config(cls, cfg: Config) -> "FlagRules":
@@ -37,6 +38,7 @@ class FlagRules:
             flag_status={str(k): str(v) for k, v in q["flag_status"].items()},
             status_treatment={str(k): str(v) for k, v in q.get("status_treatment", {}).items()},
             max_accum_days=int(q.get("max_accumulation_days", MAX_ACCUM_DAYS_DEFAULT)),
+            absorb_uncertain=bool(q.get("absorb_uncertain_into_accumulation", True)),
         )
 
     def status_of(self, flag) -> str:
@@ -72,22 +74,27 @@ def complete_index(daily: pd.DataFrame, start: dt.date, end: dt.date, climate_id
     return d
 
 
-def _find_accumulation_blocks(vals: np.ndarray, is_acc: np.ndarray, max_days: int) -> tuple[np.ndarray, np.ndarray]:
+def _find_accumulation_blocks(
+    vals: np.ndarray, is_acc: np.ndarray, max_days: int, is_unc: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray]:
     """Return (block_id per day, -1 if none) and an 'unresolved' mask.
 
     Encoding A: the accumulated flag sits on the day carrying the total; preceding no-value days
-    belong to the block. Encoding B: a run of no-value accumulated-flag days is followed by the
-    day carrying the total. Both are handled. A block longer than max_days is unresolved.
+    (and, if is_unc is given, preceding 'precipitation occurred, amount uncertain' days — the
+    weekend pattern at volunteer stations) belong to the block. Encoding B: a run of no-value
+    accumulated-flag days is followed by the day carrying the total. A block longer than
+    max_days is unresolved.
     """
     n = len(vals)
     block = np.full(n, -1, dtype=np.int64)
     unresolved = np.zeros(n, dtype=bool)
     isnan = np.isnan(vals)
+    joinable = isnan | (is_unc if is_unc is not None else False)
     bid = 0
     # Encoding A
     for i in np.flatnonzero(is_acc & ~isnan):
         j = i
-        while j - 1 >= 0 and isnan[j - 1] and block[j - 1] == -1:
+        while j - 1 >= 0 and joinable[j - 1] and block[j - 1] == -1:
             j -= 1
         if i - j + 1 > max_days:
             unresolved[j : i + 1] = True
@@ -132,7 +139,8 @@ def annotate(daily: pd.DataFrame, rules: FlagRules) -> pd.DataFrame:
     vals[status == "missing"] = np.nan
 
     is_acc = status == "accumulated"
-    block, unresolved = _find_accumulation_blocks(vals, is_acc, rules.max_accum_days)
+    is_unc = (status == "uncertain") if rules.absorb_uncertain else None
+    block, unresolved = _find_accumulation_blocks(vals, is_acc, rules.max_accum_days, is_unc)
     status[unresolved] = "missing"
     vals[unresolved] = np.nan
     # Days without a value and not part of a block are missing.
@@ -274,4 +282,43 @@ def assign_tiers(comp: pd.DataFrame, cfg: Config, id_col: str = "climate_id") ->
         np.where(out["target_valid_total"] & (out["n_baseline_valid_total"] >= t2), 2, 3),
     )
     out["tier"] = tier
+    # Provisional: the baseline qualifies but the target window is short of data, usually because
+    # staffed stations report late. Kept out of regional indices until the data arrive.
+    pmax = int(c.get("provisional_max_missing_days", 10))
+    miss = out["target_missing_total"].fillna(10**6)
+    prov = (out["tier"] == 3) & (miss > int(c["totals_max_missing_days"])) & (miss <= pmax)
+    out["tier_provisional"] = np.where(
+        prov & (out["n_baseline_valid_total"] >= t1), 1, np.where(prov & (out["n_baseline_valid_total"] >= t2), 2, 0)
+    )
+    out["status"] = np.where(out["tier"] < 3, "final", np.where(out["tier_provisional"] > 0, "provisional", "insufficient"))
     return out.reset_index()
+
+
+def accumulation_patterns(daily: pd.DataFrame, rules: FlagRules) -> dict:
+    """How a station encodes accumulations: what C-flag days hold, what follows them, and which
+    weekday accumulated totals fall on (Monday-heavy = volunteer weekend pattern)."""
+    st = np.array([rules.status_of(f) for f in daily["precip_flag"].tolist()], dtype=object)
+    v = daily["precip"].to_numpy(dtype=float)
+    acc, unc = st == "accumulated", st == "uncertain"
+    out: dict = {"n_acc_days": int(acc.sum()), "n_unc_days": int(unc.sum())}
+    if unc.any():
+        out["unc_value_nan"] = int((unc & np.isnan(v)).sum())
+        out["unc_value_zero"] = int((unc & (v == 0)).sum())
+        out["unc_value_pos"] = int((unc & (v > 0)).sum())
+        # C runs and whether an A/F day immediately follows
+        m = np.r_[0, unc.astype(np.int8), 0]
+        starts, ends = np.flatnonzero(np.diff(m) == 1), np.flatnonzero(np.diff(m) == -1)
+        out["n_unc_runs"] = int(len(starts))
+        out["unc_runs_followed_by_acc"] = int(sum(1 for e in ends if e < len(st) and acc[e]))
+        out["mean_unc_run_len"] = round(float(np.mean(ends - starts)), 2)
+    if acc.any():
+        idx = np.flatnonzero(acc)
+        prev = idx - 1
+        ok = prev >= 0
+        out["acc_preceded_by_unc"] = int(unc[prev[ok]].sum())
+        out["acc_preceded_by_nan"] = int(np.isnan(v[prev[ok]]).sum())
+        out["acc_value_nan"] = int(np.isnan(v[idx]).sum())
+        wd = pd.DatetimeIndex(daily["date"].to_numpy()[idx]).dayofweek
+        for k, name in enumerate(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]):
+            out[f"acc_on_{name}"] = int((wd == k).sum())
+    return out

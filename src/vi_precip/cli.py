@@ -42,10 +42,13 @@ def main(argv: list[str] | None = None) -> int:
     i.add_argument("--stations", help="comma-separated climate IDs to restrict to (testing)")
     i.add_argument("--refresh-stations", action="store_true", help="re-download station metadata")
 
-    u = sub.add_parser("update", help="refresh recent data then rebuild (milestone 1: inventory)")
+    u = sub.add_parser("update", help="refresh recent data, then rebuild inventory and metrics")
     u.add_argument("--refresh-stations", action="store_true")
 
-    for name in ("metrics", "enso", "temperature", "site"):
+    m = sub.add_parser("metrics", help="units, precipitation metrics, anomalies, homogeneity checks")
+    m.add_argument("--n-boot", type=int, default=1000, help="bootstrap samples for return-period intervals")
+
+    for name in ("enso", "temperature", "site"):
         sub.add_parser(name, help="(later milestone)")
 
     a = p.parse_args(argv)
@@ -69,8 +72,15 @@ def main(argv: list[str] | None = None) -> int:
         for k, v in paths.items():
             print(f"  {k:22s} {v}")
         return 0
+    if a.cmd == "metrics":
+        paths = pipeline.run_metrics(cfg, n_boot=a.n_boot)
+        print("\nOutputs:")
+        for k, v in paths.items():
+            print(f"  {k:22s} {v}")
+        return 0
     if a.cmd == "update":
         paths = pipeline.run_inventory(cfg, refresh_recent=True, refresh_stations=a.refresh_stations)
+        paths |= pipeline.run_metrics(cfg)
         print("\nOutputs:")
         for k, v in paths.items():
             print(f"  {k:22s} {v}")

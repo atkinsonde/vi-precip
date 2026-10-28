@@ -96,7 +96,9 @@ def find_candidates(
             overlap = min(A["last"], B["last"]) - B["first"] + pd.Timedelta(days=1)
             overlap = max(overlap, pd.Timedelta(0))
             gap = B["first"] - A["last"] - pd.Timedelta(days=1) if B["first"] > A["last"] else pd.Timedelta(0)
-            if overlap > max_ov:
+            if B["last"] <= A["last"]:
+                temporal = "contained"  # B lies inside A's span: a side record, not a continuation
+            elif overlap > max_ov:
                 temporal = "parallel"
             elif gap > max_gap:
                 temporal = "disjoint"
@@ -105,7 +107,7 @@ def find_candidates(
             strict = d[k] <= float(c["join_max_km"]) and (not np.isfinite(dz) or dz <= float(c["join_max_dz_m"]))
             if strict and temporal == "complementary":
                 suggestion = "join"
-            elif (strict and temporal in ("parallel", "disjoint")) or (not strict and temporal == "complementary"):
+            elif strict or temporal == "complementary":
                 suggestion = "review"
             else:
                 continue
@@ -126,6 +128,15 @@ def find_candidates(
                     overlap_stats(annotated[A["climate_id"]], annotated[B["climate_id"]],
                                   cfg.wet_thresholds, int(c["min_overlap_days_for_stats"]))
                 )
+            # Disagreement over a real overlap demotes an automatic join.
+            r0, ratio = row.get("corr_lag+0"), row.get("ratio_total_b_over_a")
+            row["overlap_disagrees"] = bool(
+                row.get("n_overlap_valid_days", 0) >= int(c["min_overlap_days_for_stats"])
+                and ((pd.notna(r0) and r0 < float(c.get("min_overlap_corr", 0.8)))
+                     or (pd.notna(ratio) and abs(ratio - 1) > float(c.get("max_overlap_ratio_dev", 0.1))))
+            )
+            if row["suggestion"] == "join" and row["overlap_disagrees"]:
+                row["suggestion"] = "review"
             rows.append(row)
     out = pd.DataFrame(rows)
     if len(out):

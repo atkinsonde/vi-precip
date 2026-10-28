@@ -18,7 +18,11 @@ def cfg(tmp_path):
     raw["basemap"]["enabled"] = False
     (tmp_path / "config").mkdir()
     shutil.copy(ROOT / "config" / "region_overrides.csv", tmp_path / "config")
-    shutil.copy(ROOT / "config" / "composites.csv", tmp_path / "config")
+    (tmp_path / "config" / "composites.csv").write_text(
+        "composite_id,order,climate_id,use_from,use_to,note\n"
+        "C_1021830,1,1021830,,2013-06-30,test\n"
+        "C_1021830,2,1021831,2013-07-01,,\n"
+    )
     p = tmp_path / "config" / "config.yaml"
     p.write_text(yaml.safe_dump(raw))
     return load_config(p, root=tmp_path)

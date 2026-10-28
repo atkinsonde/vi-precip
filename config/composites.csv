@@ -1,1 +1,11 @@
 composite_id,order,climate_id,use_from,use_to,note
+C_1018620,1,1018620,,2013-07-10,Victoria Intl A: ID change 2013; no overlap - verify with neighbour break test
+C_1018620,2,1018621,2013-07-11,,
+C_1108447,1,1108447,,2013-06-12,Vancouver Intl A: ID change 2013 (HWOS 1108425 excluded - short side record); verify with break test
+C_1108447,2,1108395,2013-06-13,,
+C_1100030,1,1100030,,2012-06-20,Abbotsford A: ID change 2012; verify with break test
+C_1100030,2,1100031,2012-06-21,,
+C_1026270,1,1026270,,2013-06-12,Port Hardy A: ID change 2013; verify with break test
+C_1026270,2,1026271,2013-06-13,,
+C_1018610,1,1018610,,2004-11-30,Victoria Gonzales Hts -> Gonzales CS: 1723-day overlap corr 0.997 ratio 1.000; also the long-record backbone
+C_1018610,2,1018611,2004-12-01,,

@@ -52,3 +52,20 @@ def test_smoke(cfg):
     out = pipeline.run_smoke(cfg, client=client, name="GONZALES")
     assert out["station"] == "1018610"
     assert any(r["year"] == 2026 and r["valid_total"] for r in out["window"])
+
+
+def test_metrics_end_to_end(cfg):
+    client = ECCCClient(cfg, session=FakeSession())
+    pipeline.run_inventory(cfg, client=client)
+    paths = pipeline.run_metrics(cfg, n_boot=50)
+    units = pd.read_csv(paths["units"], dtype={"unit_id": str}).set_index("unit_id")
+    assert "C_1021830" in units.index and "1021830" not in units.index  # members replaced by composite
+    assert units.loc["C_1021830", "tier"] == 1
+    wide = pd.read_csv(paths["anomalies"], dtype={"unit_id": str}).set_index("unit_id")
+    assert (wide["total_window__pct_of_median"] < 100).all()  # the fake autumn is dry everywhere
+    met = pd.read_csv(paths["metrics"], dtype={"unit_id": str})
+    ab = met[(met["unit_id"] == "1100031") & (met["year"] == 2020) & (met["threshold"] == 1.0)].iloc[0]
+    assert ab["n_ambiguous"] >= 0 and 0 < ab["frac_wet"] < 1
+    pat = pd.read_csv(paths["accumulation_patterns"], dtype={"climate_id": str}).set_index("climate_id")
+    assert pat.loc["1100031", "unc_runs_followed_by_acc"] == pat.loc["1100031", "n_unc_runs"] > 0
+    assert paths["breaks"].exists() and paths["map_window"].exists()

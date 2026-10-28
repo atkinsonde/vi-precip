@@ -95,7 +95,7 @@ has a treatment:
 | A, F | accumulated | multi-day block, see 4.3 |
 | E | estimated | valid, counted |
 | C, L | uncertain | valid, counted |
-| ^ | incomplete | valid, counted. **Revisit after inventory**: if common at automatic stations, run a sensitivity test with this status set to invalid. |
+| ^ | incomplete | valid, counted. The 2000–2026 inventory contains no `^` flags. |
 | other | unknown | valid, counted, warned |
 
 ### 4.3 Accumulated values
@@ -103,6 +103,14 @@ has a treatment:
 An accumulation block is the accumulated-flag day plus the immediately preceding
 no-value days. Equivalently, it is a run of no-value accumulated-flag days plus the
 first following day that has a value.
+
+**Inventory finding.** At volunteer (co-op) stations, C days outnumber A days by about
+1.6 to 1. This is the weekend pattern: Saturday and Sunday are flagged C, and Monday
+carries an accumulated total flagged A. So C days immediately before an A/F day join
+that block (`qc.absorb_uncertain_into_accumulation`). The metrics stage writes
+`accumulation_patterns.csv`, which confirms per station what C days hold (no value,
+zero, or positive), how often they precede an A day, and the weekday distribution of
+A days.
 
 - **Totals**: the block counts as valid only if the whole block lies inside the
   period. A block straddling a period boundary makes its in-period days missing.
@@ -118,6 +126,7 @@ first following day that has a value.
 | Daily-distribution metrics valid | ≤ 5 missing days in the window. Counts are converted to fractions of valid days. |
 | Tier 1 | Window total valid in ≥ 22 of 26 baseline years **and** in the target year |
 | Tier 2 | ≥ 12 baseline years **and** target year valid. The baseline period is reported per station. |
+| Provisional | The baseline qualifies for Tier 1 or 2, but the target window has 3–10 missing days, usually because staffed stations report late. Mapped with a distinct symbol, and the total is a lower bound. Missing days are checked against neighbours. Excluded from regional indices until the data arrive. |
 | Tier 3 | Everything else (inventory and context only) |
 
 The island-wide and regional indices use Tier 1 stations only, so the station set is
@@ -132,7 +141,11 @@ combined silently.
   to 5 km and 50 m is listed for "review".
 - **Temporal**: complementary records, meaning the overlap is ≤ 3 years and the gap
   ≤ 2 years. Longer concurrent overlap is labelled "parallel" and needs a
-  user-chosen switch date.
+  user-chosen switch date. A record lying entirely inside another's span is labelled
+  "contained" (a side record, not a continuation) and is never joined automatically.
+- **Overlap gate**: an automatic join is demoted to "review" if the daily correlation
+  over the overlap is below 0.8, or the overlap total ratio differs from 1 by more
+  than 10%.
 - **Evidence over the overlap**: station-name similarity, correlation of daily
   precipitation at lags −1, 0 and +1, ratio of overlap totals, and wet-day frequency
   at 0.2 mm and 1.0 mm for each member.
@@ -141,6 +154,23 @@ combined silently.
 - **Files**: proposals go to `outputs/tables/composites_proposed.csv`. Accepted joins
   live in `config/composites.csv`. Composites carry their own ID (`C_<first member>`)
   and a distinct map symbol.
+- **Zero-overlap joins** (the airport ID changes of 2012–13) cannot be checked by
+  overlap statistics. They are tested instead against neighbours at the switch year
+  (§5).
+- **Accepted after the inventory** (2000–2026 analysis):
+  - Victoria Intl A, Vancouver Intl A (HWOS excluded), Abbotsford A and Port Hardy A.
+    These are ID changes with no overlap, pending the break test.
+  - Victoria Gonzales Hts → Gonzales CS: corr 0.997 and ratio 1.000 over 1,723 days.
+    This is also the backbone of the long record.
+- **Rejected or deferred**:
+  - Hope: the old Hope/Hope AUT and the new Hope A/Airport records disagree by a factor
+    of two over their overlap (ratio 0.49).
+  - Saanichton CDA → CFIA: ratio 0.91 and best lag −1. Splicing would bias 2026 dry by
+    about 9%.
+  - Estevan Point manual → CS: ratio 0.90, so the same objection applies. CS is used
+    alone for 2000–2026, and the long record is deferred to AHCCD.
+  - Squamish, Callaghan and Cypress Bowl: contained side records.
+  - Nanaimo A: no 2026 data.
 
 ## 5. Definitions
 
@@ -152,11 +182,27 @@ combined silently.
 | Event | run of consecutive wet days, with total, duration, peak and start date | as above at 0.2 mm |
 | Trace | 0 mm in totals, flagged, never wet | — |
 
-**Threshold decision (data-driven, after the inventory).** For each accepted
-composite, test whether wet-day frequency at ≥ 0.2 mm shows a step at the join date
-that does not appear at ≥ 1.0 mm. If such steps are common, 1.0 mm stays primary.
-Otherwise 0.2 mm becomes primary. Both thresholds are always computed, and the
-website exposes a switch.
+**Day states** for threshold t:
+- **wet**: daily-valid and ≥ t.
+- **dry**: daily-valid and < t, or inside an accumulation block whose total is < t
+  (every day of such a block must have been below t).
+- **ambiguous**: inside a block whose total is ≥ t.
+- **missing**: everything else.
+
+Wet-day frequency counts each ambiguous block of L days as its expected number of wet
+days, E = L·p / (1 − (1 − p)^L), where p is the unit's wet-day probability. Simply
+dropping such blocks would bias the frequency low, because only rainy blocks are
+ambiguous.
+
+**Threshold decision (data-driven).** For every final Tier 1/2 unit, build an annual
+series of wet-day frequency minus that of up to four neighbours (≤ 75 km).
+- A Pettitt test finds a change point anywhere in the series, with no metadata needed.
+- For composites, a Welch t-test compares the series before and after each switch
+  year.
+- If breaks are clearly more common at 0.2 mm than at 1.0 mm, 1.0 mm stays primary.
+  Otherwise 0.2 mm becomes primary.
+
+Both thresholds are always computed, and the website exposes a switch.
 
 ## 6. Metrics (per station × year)
 
@@ -316,20 +362,37 @@ one implementation of each metric.
 
 | # | Content | Status |
 |---|---|---|
-| 1 | Skeleton, ECCC client and cache, probe and smoke test, inventory, completeness, tiers, composite candidates, inventory maps and timeline | **this commit** |
-| 2 | Accepted composites applied; standardized dataset; precipitation metrics (totals, bins, decomposition, spells, events, onset); anomalies; threshold step test | |
+| 1 | Skeleton, ECCC client and cache, probe and smoke test, inventory, completeness, tiers, composite candidates, inventory maps and timeline | done |
+| 2 | Accepted composites applied; standardized dataset; precipitation metrics (totals, bins, decomposition, spells, events, onset); anomalies; threshold step test; quick-look map | **this commit** |
 | 3 | Regional indices, EOFs, coherence figures, anomaly maps | |
 | 4 | Long record (AHCCD + raw), climate indices, ENSO tests and regressions | |
 | 5 | Temperature module (Tmax, Tmin, DTR) | |
 | 6 | Static website build | |
 | 7 | PCIC adapter | |
 
-## 14. Open items to settle from the inventory
+## 14. Findings from the inventory, and open items
 
-- How ECCC encodes accumulations in the API (which day carries the flag). The QC
-  handles both encodings; the probe's flag tallies will confirm which is used.
-- How common the `^` flag is at automatic stations, and whether it should be treated
-  as valid.
-- The station list and the accepted composites.
-- The primary wet-day threshold, from the step test (milestone 2).
-- Long-record stations, chosen against AHCCD availability.
+**Findings**
+- **Reporting lag.** Staffed stations (volunteer and lightstation) report days to
+  weeks late. Several strong West VI and North VI records are provisional for now:
+  Ucluelet Kennedy Camp, Cape Beale, Quatsino Lightstation, Nootka and Merry Island.
+  Re-running `update` in mid-November and again in early December should promote
+  most of them.
+- **No precipitation at new automatic airport stations.** The new automatic airport
+  IDs (Tofino A 1038210, Nanaimo A 1025365, and others from 2018) report no
+  precipitation in the daily data. Tofino has no 2026 precipitation; Lennard Island
+  is the nearby Tier 1 substitute.
+- **Long-record candidates**, spanning south-east, mid-east, west and north Vancouver
+  Island plus the Fraser Valley and Metro Vancouver:
+  - Victoria Gonzales (1898–, composite);
+  - Comox A (1944–, a single ID);
+  - Estevan Point (1908–);
+  - Quatsino (1895–);
+  - Agassiz CDA → RCS (1889–; corr 0.75, ratio 1.006);
+  - Vancouver Harbour (1925–).
+  These are to be checked against AHCCD in milestone 4.
+
+**Open**
+- C-day encoding: confirm from `accumulation_patterns.csv`.
+- Primary wet-day threshold: decide from `homogeneity_breaks.csv`.
+- Acceptance of the zero-overlap airport joins: decide from the switch-year tests.

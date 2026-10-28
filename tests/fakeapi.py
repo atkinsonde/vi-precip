@@ -66,6 +66,23 @@ def _daily_records(cid: str, first: dt.date, last: dt.date) -> list[dict]:
             }
         )
         d += dt.timedelta(days=1)
+    if cid == "1100031":  # volunteer weekend pattern: Sat/Sun reported as C (no value), Monday carries the total
+        held = 0.0
+        pending = []
+        for r in recs:
+            d = dt.date.fromisoformat(r["LOCAL_DATE"][:10])
+            if d.year < 2015:
+                continue
+            if d.weekday() in (5, 6):
+                held += r["TOTAL_PRECIPITATION"] or 0.0
+                pending.append(r)
+            elif d.weekday() == 0 and pending:
+                if held > 0:
+                    for p in pending:
+                        p["TOTAL_PRECIPITATION"], p["TOTAL_PRECIPITATION_FLAG"] = None, "C"
+                    r["TOTAL_PRECIPITATION"] = round(held + (r["TOTAL_PRECIPITATION"] or 0.0), 1)
+                    r["TOTAL_PRECIPITATION_FLAG"] = "A"
+                held, pending = 0.0, []
     if cid == "1016995":  # an accumulation block inside the 2026 window: Sep 10-12 missing, Sep 13 accumulated
         for r in recs:
             if r["LOCAL_DATE"][:10] in ("2026-09-10", "2026-09-11", "2026-09-12"):

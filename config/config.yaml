@@ -18,6 +18,7 @@ completeness:
   daily_max_missing_days: 5     # daily-distribution metrics valid with at most this many missing days (window)
   tier1_min_baseline_years: 22
   tier2_min_baseline_years: 12
+  provisional_max_missing_days: 10  # baseline qualifies but target window has 3-10 missing days (late reports)
 
 qc:
   # ECCC flag -> status. Statuses: missing, trace, accumulated, estimated, uncertain, incomplete.
@@ -35,8 +36,13 @@ qc:
   status_treatment:
     estimated: valid
     uncertain: valid
-    incomplete: valid           # revisit after inventory (DESIGN.md §4.2)
+    incomplete: valid           # no '^' flags found in the 2000-2026 inventory
     unknown: valid
+  # Volunteer stations report weekend days as C ("precipitation occurred, amount uncertain")
+  # followed by an A (accumulated) day. With this on, C days immediately preceding an A/F day
+  # join that accumulation block (daily-invalid; counted only in totals and events).
+  absorb_uncertain_into_accumulation: true
+  max_accumulation_days: 10
 
 composites:
   join_max_km: 1.0
@@ -46,6 +52,8 @@ composites:
   max_overlap_years: 3          # longer concurrent overlap => "parallel"
   max_gap_years: 2
   min_overlap_days_for_stats: 30
+  min_overlap_corr: 0.8          # an automatic 'join' is demoted to 'review' below this daily correlation...
+  max_overlap_ratio_dev: 0.1     # ...or if the overlap total ratio differs from 1 by more than this
   switch_rule: newer            # newer member takes over from its first valid day
 
 domain:
