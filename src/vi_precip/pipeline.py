@@ -367,6 +367,12 @@ def run_metrics(cfg: Config, n_boot: int = 1000) -> dict[str, Path]:
             f"(label: % of baseline median)", label_col="total_window__pct_of_median")
     _print_metrics_summary(units, wide, brk_sum, diag_df, cfg)
     _write_vintage(cfg, cfg.eccc["base_url"])
+    try:
+        from .brief import run_brief
+        paths["brief"] = run_brief(cfg)
+        print(f"\nBriefing page: {paths['brief']}")
+    except Exception as ex:  # the brief must never block the analysis outputs
+        log.exception("Brief failed (%s); run `python run.py brief` after fixing", ex)
     return paths
 
 
@@ -381,12 +387,16 @@ def _print_metrics_summary(units, wide, brk_sum, diag, cfg) -> None:
                   f"{'' if pd.isna(r['prov_missing_days_nbr_wet']) else int(r['prov_missing_days_nbr_wet'])}")
     if len(wide):
         fin = wide[wide["status"] == "final"]
-        print(f"\n=== {cfg.target_year} window total (Sep 1–{cfg.end_date:%b %d}), final units ===")
-        cols = ["name", "region", "total_window__value", "total_window__pct_of_median", "total_window__rank_dry",
-                "total_window__n_years", "total_window__spi"]
+        print(f"\n=== {cfg.target_year} Oct 1–{cfg.end_date.day} and Sep 1–{cfg.end_date:%b %d}, final units ===")
+        cols = ["name", "region", "total_oct__value", "total_oct__pct_of_median", "total_oct__rank_dry",
+                "total_window__value", "total_window__pct_of_median", "total_window__rank_dry", "total_window__n_years",
+                "driest30_mm__value", "driest30_mm__rank_dry"]
+        cols = [c for c in cols if c in fin]
         print(fin[cols].round(1).to_string(index=False))
-        by = fin.groupby("region")["total_window__pct_of_median"].median().round(0)
-        print("\nMedian % of baseline median by region:", by.to_dict())
+        by = fin.groupby("region")[["total_sep__pct_of_median", "total_oct__pct_of_median",
+                                    "total_window__pct_of_median"]].median().round(0)
+        by.columns = ["Sep %", "Oct %", "Sep-Oct %"]
+        print("\nMedian % of normal by region:\n" + by.to_string())
     if len(brk_sum):
         print("\n=== Homogeneity: Pettitt breaks in wet-day frequency vs neighbours (p<0.05) ===")
         print(brk_sum.to_string(index=False))

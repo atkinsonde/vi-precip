@@ -69,3 +69,4 @@ def test_metrics_end_to_end(cfg):
     pat = pd.read_csv(paths["accumulation_patterns"], dtype={"climate_id": str}).set_index("climate_id")
     assert pat.loc["1100031", "unc_runs_followed_by_acc"] == pat.loc["1100031", "n_unc_runs"] > 0
     assert paths["breaks"].exists() and paths["map_window"].exists()
+    assert paths["brief"].exists() and "driest30_mm__rank_dry" in wide

@@ -90,3 +90,13 @@ def test_pettitt_finds_step():
     x = np.r_[rng.normal(0, 0.01, 13), rng.normal(0.05, 0.01, 13)]
     k, K, p = homogeneity.pettitt(x)
     assert k == 12 and p < 0.01
+
+
+def test_driest_periods(cfg):
+    # Sep 1..Oct 26: 2 mm/day except Sep 20 .. Oct 24 (35 days) dry
+    idx = pd.date_range("2026-06-01", "2026-10-26", freq="D")
+    v = np.where((idx >= "2026-09-20") & (idx <= "2026-10-24"), 0.0, 2.0)
+    a = ann_from(list(v))
+    d = metrics.driest_periods(a, cfg, 2026)
+    assert d["driest30_mm"] == 0.0 and d["valid_driest30"]
+    assert d["driest45_mm"] == 20.0  # 45 days must include 10 wet days at 2 mm

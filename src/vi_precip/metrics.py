@@ -236,6 +236,47 @@ def year_metrics(ann: pd.DataFrame, cfg: Config, year: int, t: float, refs: dict
     return row, bins, spells
 
 
+def driest_periods(ann: pd.DataFrame, cfg: Config, year: int) -> dict:
+    """Lowest N-day running total inside [search start, end date] of `year`, for each N.
+
+    Accumulation-block totals sit on the block's last day, which is fine for running sums.
+    A window counts if it has at most `driest_max_missing` missing days; the year counts
+    (valid_driest{N}) if at least half of the possible windows count. Each year picks its own
+    driest window, so years are compared on an equal footing.
+    """
+    a = cfg.raw["analysis"]
+    sm, sd = (int(x) for x in str(a.get("driest_search_start", "09-01")).split("-"))
+    lo, hi = pd.Timestamp(year, sm, sd), pd.Timestamp(year, cfg.end_date.month, cfg.end_date.day)
+    seg = ann.loc[lo:hi]
+    v = seg["precip"].to_numpy(dtype=float)
+    known = seg["daily_valid"].to_numpy(dtype=bool) | (seg["acc_block"].to_numpy() >= 0)
+    vals = np.where(known, np.nan_to_num(v, nan=0.0), 0.0)
+    miss = (~known).astype(int)
+    out: dict = {}
+    max_miss = int(a.get("driest_max_missing", 2))
+    for n in [int(x) for x in a.get("driest_n_days", [30, 45])]:
+        key = f"driest{n}"
+        if len(seg) < n:
+            out.update({f"{key}_mm": np.nan, f"valid_{key}": False, f"{key}_start": None, f"{key}_end": None})
+            continue
+        k = np.ones(n)
+        tot = np.convolve(vals, k, mode="valid")
+        mis = np.convolve(miss, k, mode="valid")
+        ok = mis <= max_miss
+        if not ok.any():
+            out.update({f"{key}_mm": np.nan, f"valid_{key}": False, f"{key}_start": None, f"{key}_end": None})
+            continue
+        i = int(np.argmin(np.where(ok, tot, np.inf)))
+        out.update({
+            f"{key}_mm": round(float(tot[i]), 1),
+            f"valid_{key}": bool(ok.mean() >= 0.5),
+            f"{key}_start": seg.index[i].date().isoformat(),
+            f"{key}_end": seg.index[i + n - 1].date().isoformat(),
+            f"{key}_missing": int(mis[i]),
+        })
+    return out
+
+
 def unit_metrics(uid: str, ann: pd.DataFrame, comp: pd.DataFrame, cfg: Config) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """All years and thresholds for one unit. `comp` = this unit's completeness rows."""
     c = comp.set_index(["year", "period"])
@@ -244,6 +285,7 @@ def unit_metrics(uid: str, ann: pd.DataFrame, comp: pd.DataFrame, cfg: Config) -
     win_ok = {y: bool(c.loc[(y, "window"), "valid_daily"]) for y in cfg.analysis_years if (y, "window") in c.index}
     sep_ok = {y: bool(c.loc[(y, "sep"), "valid_total"]) for y in cfg.analysis_years if (y, "sep") in c.index}
     rows, binrows, spellrows = [], [], []
+    driest = {y: driest_periods(ann, cfg, y) for y in cfg.analysis_years}
     for t in cfg.wet_thresholds:
         sep_tot = [float(c.loc[(y, "sep"), "total_mm"]) for y in base_years if sep_ok.get(y)]
         refs = baseline_refs(ann, cfg, t, [y for y in base_years if win_ok.get(y)], sep_tot)
@@ -252,7 +294,7 @@ def unit_metrics(uid: str, ann: pd.DataFrame, comp: pd.DataFrame, cfg: Config) -
             if not r:
                 continue
             key = {"unit_id": uid, "year": y, "threshold": t}
-            r = {**key, **r, "valid_daily": win_ok.get(y, False)}
+            r = {**key, **r, "valid_daily": win_ok.get(y, False), **driest.get(y, {})}
             for per in cfg.periods:
                 if (y, per) in c.index and per != "extended":
                     r[f"total_{per}"] = c.loc[(y, per), "total_mm"]

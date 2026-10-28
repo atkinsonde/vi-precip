@@ -24,6 +24,8 @@ METRICS: dict[str, tuple[str, str, str]] = {
     "total_window": ("low", "valid_total_window", "total"),
     "total_sep": ("low", "valid_total_sep", "total"),
     "total_oct": ("low", "valid_total_oct", "total"),
+    "driest30_mm": ("low", "valid_driest30", "total"),
+    "driest45_mm": ("low", "valid_driest45", "total"),
     "n_wet_scaled": ("low", "valid_daily", "count"),
     "sdii": ("low", "valid_daily", "amount"),
     "max_daily": ("low", "valid_daily", "amount"),
@@ -142,6 +144,9 @@ def anomalies(metrics: pd.DataFrame, units: pd.DataFrame, cfg: Config, n_boot: i
             if family == "total":
                 r.update(spi_and_rp(base, x, n_boot=n_boot))
                 r["rp_fit_extrapolated"] = bool(np.isfinite(r.get("rp_fit", np.nan)) and r["rp_fit"] > 2 * (n + 1))
+                # Bootstrap upper bounds explode when the fit is unstable; report them as unbounded.
+                if np.isfinite(r.get("rp_fit_hi", np.nan)) and r["rp_fit_hi"] > 10 * (n + 1):
+                    r["rp_fit_hi"] = np.inf
             rows.append(r)
     out = pd.DataFrame(rows)
     if len(out):
@@ -160,8 +165,11 @@ def wide_summary(anom: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     base = a[keys].drop_duplicates("unit_id").set_index("unit_id")
     pieces = {}
     spec = {
-        "total_sep": ["value", "pct_of_median", "pctl", "rank_dry", "n_years", "spi"],
-        "total_oct": ["value", "pct_of_median", "pctl", "rank_dry", "n_years", "spi"],
+        "total_oct": ["value", "baseline_median", "pct_of_median", "pctl", "rank_dry", "n_years", "spi", "rp_emp",
+                      "record_dry", "lower_bound"],
+        "total_sep": ["value", "baseline_median", "pct_of_median", "pctl", "rank_dry", "n_years", "spi"],
+        "driest30_mm": ["value", "baseline_median", "pct_of_median", "pctl", "rank_dry", "n_years", "record_dry"],
+        "driest45_mm": ["value", "baseline_median", "pct_of_median", "pctl", "rank_dry", "n_years", "record_dry"],
         "total_window": ["value", "baseline_median", "pct_of_median", "pctl", "rank_dry", "n_years", "spi", "rp_emp",
                          "rp_fit", "rp_fit_lo", "rp_fit_hi", "record_dry", "lower_bound"],
         "n_wet_scaled": ["value", "baseline_median", "pctl", "rank_dry"],
@@ -178,4 +186,5 @@ def wide_summary(anom: pd.DataFrame, cfg: Config) -> pd.DataFrame:
         s.columns = [f"{m}__{c}" for c in cols]
         pieces[m] = s
     out = base.join(list(pieces.values()), how="left").reset_index()
-    return out.sort_values(["region", "total_window__pct_of_median"]).reset_index(drop=True)
+    sort = "total_oct__pct_of_median" if "total_oct__pct_of_median" in out else "total_window__pct_of_median"
+    return out.sort_values(["region", sort]).reset_index(drop=True)

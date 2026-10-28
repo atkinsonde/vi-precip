@@ -29,7 +29,8 @@ This needs Python 3.10 or newer. All commands below run from the project folder.
 | 2 | `python run.py smoke --name GONZALES` | Runs one station end to end for the last two seasons: download, QC, completeness, and a plot. Uses `--station <climate id>` or `--name <substring>`; with neither, it picks a long-running East VI station. | < 1 min |
 | 3 | `python run.py inventory --max-stations 5` | A quick partial inventory, to check the whole stage before the full run. | 1–2 min |
 | 4 | `python run.py inventory` | The full inventory. The first run downloads everything; later runs read the cache. | several min first time |
-| 5 | `python run.py metrics` | Builds units, metrics, anomalies and homogeneity tests from the cached data. It makes no downloads. | a few min |
+| 5 | `python run.py metrics` | Builds units, metrics, anomalies and homogeneity tests from the cached data, then writes the briefing page. It makes no downloads. | a few min |
+| – | `python run.py brief` | Rebuilds only the briefing page `outputs/brief/brief_2026.html` from the metrics tables. | seconds |
 
 Smaller options:
 

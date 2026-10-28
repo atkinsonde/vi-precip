@@ -364,7 +364,8 @@ one implementation of each metric.
 |---|---|---|
 | 1 | Skeleton, ECCC client and cache, probe and smoke test, inventory, completeness, tiers, composite candidates, inventory maps and timeline | done |
 | 2 | Accepted composites applied; standardized dataset; precipitation metrics (totals, bins, decomposition, spells, events, onset); anomalies; threshold step test; quick-look map | **this commit** |
-| 3 | Regional indices, EOFs, coherence figures, anomaly maps | |
+| 2b | Driest 30/45-day period (search Sep 1 → end date, each year its own minimum); Oct 1–end as headline period; self-contained briefing page (`run.py brief`) | **this commit** |
+| 3 | Pairwise homogeneity (replaces neighbour-mean test), regional indices, EOFs, coherence figures, anomaly maps | |
 | 4 | Long record (AHCCD + raw), climate indices, ENSO tests and regressions | |
 | 5 | Temperature module (Tmax, Tmin, DTR) | |
 | 6 | Static website build | |

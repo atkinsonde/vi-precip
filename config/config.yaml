@@ -9,6 +9,17 @@ analysis:
   extended_start: "08-01"       # continuous series for spells/events/onset
   download_start: "2000-01-01"  # earliest date fetched for the inventory stage
   long_record_start: 1950       # used in milestone 4
+  # Driest N-day period: lowest running N-day total between this month-day and the end date.
+  # Starts Sep 1 because August is climatologically the driest month: with an Aug 1 start the
+  # driest window of almost every year would sit in August and say nothing about the autumn.
+  driest_n_days: [30, 45]
+  driest_search_start: "09-01"
+  driest_max_missing: 2
+
+brief:
+  # Stations for the cumulative-precipitation panels (unit IDs; composites start with C_).
+  # Missing IDs are skipped; if none are found, one Tier 1 station per region is chosen.
+  stations: [C_1018620, C_1108447, 10253G0, 1021830, 1034600, C_1026270, 10476F0, 1046391]
 
 thresholds:
   wet_mm: [1.0, 0.2]            # first value is primary; all values are computed

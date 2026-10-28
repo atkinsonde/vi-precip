@@ -48,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
     m = sub.add_parser("metrics", help="units, precipitation metrics, anomalies, homogeneity checks")
     m.add_argument("--n-boot", type=int, default=1000, help="bootstrap samples for return-period intervals")
 
+    sub.add_parser("brief", help="rebuild the briefing page from the metrics outputs (no downloads)")
+
     for name in ("enso", "temperature", "site"):
         sub.add_parser(name, help="(later milestone)")
 
@@ -77,6 +79,10 @@ def main(argv: list[str] | None = None) -> int:
         print("\nOutputs:")
         for k, v in paths.items():
             print(f"  {k:22s} {v}")
+        return 0
+    if a.cmd == "brief":
+        from .brief import run_brief
+        print(f"Briefing page: {run_brief(cfg)}")
         return 0
     if a.cmd == "update":
         paths = pipeline.run_inventory(cfg, refresh_recent=True, refresh_stations=a.refresh_stations)
