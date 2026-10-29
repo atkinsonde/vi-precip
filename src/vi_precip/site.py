@@ -456,14 +456,20 @@ class SiteBuilder:
                 land |= MplPath(r).contains_points(pts)
             names[~land] = None
         regs = dom.region_names
+        # label placement: defaults for the south-coast regions, overridable in config site.region_labels
+        label_pos = {"Gulf Islands": {"lon": -123.33, "lat": 49.06, "angle": 38},
+                     "Sea-to-Sky": {"lon": -122.98, "lat": 50.02}} if dom.name == "south_coast" else {}
+        label_pos |= (self.cfg.raw.get("site") or {}).get("region_labels") or {}
         code = {r: i for i, r in enumerate(regs)}
         z = np.array([code.get(n, -1) if n is not None else -1 for n in names]).reshape(X.shape)
         labels = []
         for i, r in enumerate(regs):
             hit = z == i
             if hit.any():
-                labels.append({"region": r, "lon": float(np.median(X[hit])), "lat": float(np.median(Y[hit])),
-                               "n_cells": int(hit.sum())})
+                lab = {"region": r, "lon": float(np.median(X[hit])), "lat": float(np.median(Y[hit])), "angle": 0,
+                       "n_cells": int(hit.sum())}
+                lab |= {k: v for k, v in (label_pos.get(r) or {}).items() if k in ("lon", "lat", "angle")}
+                labels.append(lab)
         zz = [[None if v < 0 else int(v) for v in row] for row in z]
         return {"x": xs.tolist(), "y": ys.tolist(), "z": zz, "names": regs, "labels": labels,
                 "land_masked": bool(bm.get("land"))}
@@ -485,7 +491,7 @@ class SiteBuilder:
         html = (src / "index.html").read_text(encoding="utf-8")
         S = self.site_text()
         for k, v in {"TITLE": self.title(), "MAIN": S["title"], "TAGLINE": S["tagline"], "FEATURE": S["feature"],
-                     "AUTHOR": S["author"], "AFFIL": S["affiliation"]}.items():
+                     "AUTHOR": S["author"], "AFFIL": S["affiliation"], "EMAIL": S["email"]}.items():
             html = html.replace("{{" + k + "}}", v)
         (self.out / "index.html").write_text(html, encoding="utf-8")
         pj = a / "plotly.min.js"
@@ -508,7 +514,7 @@ class SiteBuilder:
         d = {"title": "South Coast Climate Explorer",
              "tagline": "Temperature, precipitation and river flow in coastal British Columbia, with ENSO",
              "feature": "Autumn {year}: how dry, and why?", "author": "David E Atkinson",
-             "affiliation": "Dept of Geography, University of Victoria"}
+             "affiliation": "Dept of Geography, University of Victoria", "email": "datkinso@uvic.ca"}
         d |= {k: str(v) for k, v in (self.cfg.raw.get("site") or {}).items() if k in d}
         d["feature"] = d["feature"].format(year=self.cfg.target_year)
         return {k: H.escape(v) for k, v in d.items()}

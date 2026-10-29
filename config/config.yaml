@@ -144,5 +144,8 @@ site:
   feature: "Autumn {year}: how dry, and why?"     # the current focus; {year} = target year
   author: "David E Atkinson"
   affiliation: "Dept of Geography, University of Victoria"
+  email: "datkinso@uvic.ca"
+  # Region-label placement on the subdivision map (lon, lat, angle in degrees clockwise); defaults shown
+  # region_labels: {"Gulf Islands": {lon: -123.33, lat: 49.06, angle: 38}, "Sea-to-Sky": {lon: -122.98, lat: 50.02}}
   domain_desc: "Vancouver Island, the Gulf Islands, the Sunshine Coast, Sea-to-Sky to Whistler and the Lower Mainland to Hope"
   water_desc: "south and central Vancouver Island (south of 49.8° N)"

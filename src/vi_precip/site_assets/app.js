@@ -247,8 +247,13 @@
     G.names.forEach((_, k) => { cs.push([k / n, REGCOL[k % 8]]); cs.push([(k + 1) / n, REGCOL[k % 8]]); });
     return [{ type: "heatmap", x: G.x, y: G.y, z: G.z, zmin: -0.5, zmax: n - 0.5, colorscale: cs, showscale: false, opacity: 0.45, hoverongaps: false,
       customdata: G.z.map((row) => row.map((v) => (v == null ? "" : G.names[v]))), hovertemplate: "%{customdata}<extra></extra>" },
-    { type: "scatter", mode: "text", x: G.labels.map((l) => l.lon), y: G.labels.map((l) => l.lat), text: G.labels.map((l) => "<b>" + esc(l.region) + "</b>"),
-      textfont: { size: 12, color: C().ink }, hoverinfo: "skip" }];
+    ];
+  }
+  function regionLabels() { // annotations (unlike scatter text, these can be rotated)
+    const G = M.regions_grid;
+    if (!G) return [];
+    return G.labels.map((l) => ({ x: l.lon, y: l.lat, text: "<b>" + esc(l.region) + "</b>", showarrow: false, textangle: l.angle || 0,
+      font: { size: 12, color: C().ink }, bgcolor: "rgba(0,0,0,0)" }));
   }
   function stationSet(set) {
     if (set === "temp" && T) return { title: "Temperature stations included", desc: `${T.units.unit_id.length} stations across ${M.domain_desc}, with a long enough record for daily maximum and minimum temperature.`,
@@ -270,6 +275,7 @@
     const ex = withReg ? { lon: [G.x[0], G.x[G.x.length - 1]], lat: [G.y[0], G.y[G.y.length - 1]] } : { lon: s.rows.map((r) => r.lon), lat: s.rows.map((r) => r.lat) };
     const lay = mapLayout(bm, ex.lon, ex.lat);
     if (height) lay.height = height;
+    if (s.regions && G) lay.annotations = regionLabels();
     plot(div, tr, lay);
   }
   function openStations(set) {

@@ -21,7 +21,7 @@
   <div class="titles">
     <h1 id="title">{{MAIN}}</h1>
     <div class="tagline">{{TAGLINE}}</div>
-    <div class="byline">{{AUTHOR}}, {{AFFIL}}</div>
+    <div class="byline">{{AUTHOR}} · {{AFFIL}} · <a href="mailto:{{EMAIL}}">{{EMAIL}}</a></div>
   </div>
   <div class="spacer"></div>
   <button id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
@@ -166,9 +166,10 @@
   </section>
 
   <section class="tab methods" id="tab-methods">
-    <h2>Regions and stations</h2>
-    <p class="note">Regions as used in the analysis (land coloured by the same rules that assign each station; a few borderline
-      stations are reassigned by hand in <code>config/region_overrides.csv</code>). Dots: precipitation stations used in this build.</p>
+    <h2>Regional subdivisions</h2>
+    <p class="note">The subdivisions used to group stations in every regional summary (precipitation, temperature and the ENSO
+      analysis). Land is coloured by the same rules that assign each station; a few borderline stations are reassigned by hand in
+      <code>config/region_overrides.csv</code>. Dots: precipitation stations used in this build.</p>
     <div class="card"><div class="plot map" id="meth-regions"></div></div>
     <h2>Data</h2>
     <ul>

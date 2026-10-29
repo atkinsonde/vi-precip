@@ -39,7 +39,8 @@ header.top { padding: 20px 24px 8px; max-width: 1280px; margin: 0 auto; display:
 header.top { align-items: center; gap: 20px; }
 header.top h1 { font-size: 24px; margin: 0; font-weight: 680; letter-spacing: -0.015em; line-height: 1.2; }
 header.top .tagline { color: var(--ink-2); font-size: 14px; }
-header.top .byline { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+header.top .byline { color: var(--ink-2); font-size: 13px; margin-top: 3px; font-weight: 500; }
+header.top .byline a { color: var(--accent); }
 .logo { display: block; flex: none; line-height: 0; }
 .logo img { height: 40px; width: auto; }
 .logo .logo-dark { display: none; }
