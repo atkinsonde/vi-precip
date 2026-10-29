@@ -51,12 +51,12 @@
   function plot(id, data, layout) { Plotly.react($(id), data, layout, cfg); }
 
   // ------------------------------------------------------------ maps (cartesian lon/lat with Natural Earth land)
-  function basemapTraces(bm) {
+  function basemapTraces(bm, noFill) {
     const c = C();
     const tr = [];
     if (!bm) return tr;
     const join = (rings) => { const x = [], y = []; for (const r of rings) { for (const p of r) { x.push(p[0]); y.push(p[1]); } x.push(null); y.push(null); } return { x, y }; };
-    if (bm.land && bm.land.length) {
+    if (bm.land && bm.land.length && !noFill) {
       const j = join(bm.land);
       tr.push({ x: j.x, y: j.y, type: "scatter", mode: "lines", fill: "toself", fillcolor: c.page === "#0d0d0d" ? "#2a2a28" : "#ecebe7",
         line: { width: 0 }, hoverinfo: "skip" });
@@ -136,7 +136,7 @@
 
   // ------------------------------------------------------------ header
   const B = M.baseline || [2000, 2025];
-  $("vintage").textContent = `${M.window_label || ""}, ${M.target_year || ""} · normal = ${B[0]}–${B[1]} · data through ${M.end_date || "?"}` +
+  $("vintage").textContent = `${M.window_label || ""}, ${M.target_year || ""} · reference period ${B[0]}–${B[1]} · data through ${M.end_date || "?"}` +
     (M.vintage && M.vintage.built ? ` · downloaded ${M.vintage.built.slice(0, 16).replace("T", " ")}` : "");
   $("foot-built").textContent = "Page built " + (M.built || "").replace("T", " ") + ".";
   if (M.synthetic) $("synthetic").innerHTML = '<div class="banner"><b>Synthetic test data.</b> This build was made from simulated services for testing the page; none of the numbers are real.</div>';
@@ -149,20 +149,45 @@
     const h = M.headline || {};
     const tiles = [];
     const hp = h.precip, ht = h.temp, hw = h.water, he = h.enso;
+    const nst = (n, what, set) => `<button type="button" class="linkbtn" data-set="${set}">${n} ${what} · map ›</button>`;
     if (hp) {
-      tiles.push({ k: `Precipitation, ${M.oct_label}`, v: fmt(hp.oct_pct_median) + "%", s: `of normal (median of ${hp.n} stations). ${hp.oct_top3} of ${hp.n} had one of their 3 driest since ${B[0]}.` });
-      tiles.push({ k: `Precipitation, ${M.window_label}`, v: fmt(hp.window_pct_median) + "%", s: `of normal; typically ${fin(hp.window_rank_median) ? ord(hp.window_rank_median) : "–"} driest of ${hp.n_years} years` + (fin(hp.window_rp_median) ? (hp.window_rp_median > 100 ? ", rarer than 1-in-100 years by a fitted distribution." : `, roughly a 1-in-${fmt(hp.window_rp_median)}-year event.`) : ".") });
-      if (fin(hp.wet_days)) tiles.push({ k: `Wet days (≥ ${thr0} mm), ${M.window_label}`, v: fmt(hp.wet_days), s: `against a normal of ${fmt(hp.wet_days_normal)} (station median).` });
+      tiles.push({ f: "p", k: `Precipitation, ${M.oct_label}`, v: fmt(hp.oct_pct_median) + '%<span class="u"> of typical</span>',
+        s: `Median across stations. ${hp.oct_top3} of ${hp.n} stations had one of their 3 driest since ${B[0]}.`, foot: nst(hp.n, "stations", "precip") });
+      const r = hp.window_rank_median;
+      tiles.push({ f: "p", k: `Precipitation, ${M.window_label}`, v: fmt(hp.window_pct_median) + '%<span class="u"> of typical</span>',
+        s: (fin(r) ? `Half the stations had their ${r <= 1.01 ? "driest" : ord(r) + "-driest or drier"} period of ${hp.n_years} years; ${hp.window_top3} of ${hp.n} were among their 3 driest.` : "") +
+          (fin(hp.window_rp_median) ? (hp.window_rp_median > 100 ? " Rarer than 1-in-100 years by a fitted distribution." : ` Roughly a 1-in-${fmt(hp.window_rp_median)}-year event.`) : ""),
+        foot: nst(hp.n, "stations", "precip") });
+      if (fin(hp.wet_days)) tiles.push({ f: "p", k: `Wet days (≥ ${thr0} mm), ${M.window_label}`, v: fmt(hp.wet_days) + '<span class="u"> days</span>',
+        s: `Typically ${fmt(hp.wet_days_typical)} days (station median, reference period).`, foot: nst(hp.n, "stations", "precip") });
     }
-    if (ht) tiles.push({ k: `Daytime highs, ${M.oct_label}`, v: sgn(ht.tmax_oct_anom) + " °C", s: `compared with normal (station median); above normal at ${ht.tmax_oct_warmer} of ${ht.n} stations. Nights: ${sgn(ht.tmin_oct_anom)} °C.` });
-    if (hw) tiles.push({ k: `River flow, ${M.oct_label}`, v: fmt(hw.flow_pct_median) + "%", s: `of normal (median gauge). ${hw.n_lowest} lowest and ${hw.n_top3 - hw.n_lowest} 2nd–3rd lowest since ${hw.baseline_start}, of ${hw.n} sites.` });
-    if (he && he.index) tiles.push({ k: "Tropical Pacific", v: esc(he.index.class), s: `${(E && E.index_labels[he.index.name]) || he.index.name}, ${he.index.season}: ${sgn(he.index.value, 2)} °C` });
-    $("sum-tiles").innerHTML = tiles.map((t) => `<div class="card tile"><div class="k">${esc(t.k)}</div><div class="v">${t.v}</div><div class="s">${esc(t.s)}</div></div>`).join("");
+    if (ht) {
+      const above = ht.tmax_oct_above_median;
+      tiles.push({ f: "t", k: `Daytime highs, ${M.oct_label}`, v: sgn(ht.tmax_oct_anom) + " °C",
+        s: `Against the reference-period average (station median). ` + (fin(above) ? (above === ht.n ? `Above the reference-period median at all ${ht.n} stations.` : `Above the reference-period median at ${above} of ${ht.n} stations.`) : "") +
+          (fin(ht.tmin_oct_anom) ? ` Nights: ${sgn(ht.tmin_oct_anom)} °C.` : ""), foot: nst(ht.n, "stations", "temp") });
+    }
+    if (hw) tiles.push({ f: "w", k: `River flow, ${M.oct_label}`, v: fmt(hw.flow_pct_median) + '%<span class="u"> of typical</span>',
+      s: `Median gauge; typical = median since ${hw.baseline_start}. ${hw.n_lowest} lowest and ${hw.n_top3 - hw.n_lowest} 2nd–3rd lowest since ${hw.baseline_start}.`, foot: nst(hw.n, "gauges", "water") });
+    if (he && he.index) {
+      const st = he.state;
+      if (st) {
+        const q = [st.strength, st.trend].filter(Boolean).join(", ");
+        tiles.push({ f: "e", k: "Tropical Pacific (ENSO)", v: esc(st.phase), v2: q,
+          s: `Niño 3.4, ${st.months3}: ${sgn(st.last3, 2)} °C; ${st.latest_month}: ${sgn(st.latest, 2)} °C (${sgn(st.change3, 2)} in 3 months).`,
+          foot: '<a href="#enso" class="linkbtn">ENSO analysis ›</a>', title: st.rule });
+      } else tiles.push({ f: "e", k: "Tropical Pacific (ENSO)", v: esc(he.index.class), s: `${(E && E.index_labels[he.index.name]) || he.index.name}, ${he.index.season}: ${sgn(he.index.value, 2)} °C`, foot: '<a href="#enso" class="linkbtn">ENSO analysis ›</a>' });
+    }
+    $("sum-tiles").innerHTML = tiles.map((t) => `<div class="card tile fam-${t.f}"${t.title ? ` title="${esc(t.title)}"` : ""}><div class="k"><span class="dot"></span>${esc(t.k)}</div>` +
+      `<div class="v">${t.v}</div>${t.v2 ? `<div class="v2">${esc(t.v2)}</div>` : ""}<div class="s">${esc(t.s)}</div><div class="foot">${t.foot || ""}</div></div>`).join("");
+    $("sum-tiles").querySelectorAll("button[data-set]").forEach((b) => (b.onclick = () => openStations(b.dataset.set)));
     if (hp) {
-      $("sum-lead").innerHTML = `From October 1 to ${M.end_label}, ${M.target_year}, the South Coast received about <b>${fmt(hp.oct_pct_median)}% of its normal precipitation</b>` +
+      $("sum-lead").innerHTML = `From October 1 to ${M.end_label}, ${M.target_year}, the ${hp.n} weather stations across ${esc(M.domain_desc)} received about <b>${fmt(hp.oct_pct_median)}% of their typical precipitation</b>` +
         (fin(hp.oct_pct_median_vi) ? ` (Vancouver Island stations: ${fmt(hp.oct_pct_median_vi)}%)` : "") +
-        `. ` + (fin(hp.sep_pct_median) ? (hp.sep_pct_median >= 85 ? `September was close to normal (${fmt(hp.sep_pct_median)}%), so the dryness is mainly an October story. ` : `September was also drier than normal (${fmt(hp.sep_pct_median)}%). `) : "") +
-        `“Normal” here means the median of ${B[0]}–${B[1]}.`;
+        `. ` + (fin(hp.sep_pct_median) ? (hp.sep_pct_median >= 85 ? `September was close to typical (${fmt(hp.sep_pct_median)}%), so the dryness is mainly an October story. ` : `September was also drier than typical (${fmt(hp.sep_pct_median)}%). `) : "") +
+        `<span class="note">“Typical” = each station's median for the same dates over the reference period ${B[0]}–${B[1]}. ` +
+        `<button type="button" class="linkbtn" data-set="precip">Stations and regions ›</button></span>`;
+      $("sum-lead").querySelector("button").onclick = () => openStations("precip");
     } else $("sum-lead").textContent = "Precipitation results are not available in this build.";
     // map
     if (P) {
@@ -175,9 +200,9 @@
         marker: { size: 13, color: keep.map((r) => pctColour(pct[r.i])), colorscale: divScale(false), cmin: -2, cmax: 2,
           line: { width: 1, color: C().surface } },
         customdata: keep.map((r) => [r.name, fmt(pct[r.i]), rankText(rk[r.i], n[r.i], "driest"), fmt(val[r.i]), r.id]),
-        hovertemplate: "<b>%{customdata[0]}</b><br>%{customdata[1]}% of normal (%{customdata[3]} mm)<br>%{customdata[2]} since " + B[0] + "<extra></extra>",
+        hovertemplate: "<b>%{customdata[0]}</b><br>%{customdata[1]}% of the reference-period median (%{customdata[3]} mm)<br>%{customdata[2]} since " + B[0] + "<extra></extra>",
       });
-      $("sum-map-title").textContent = `Precipitation, ${M.oct_label}, ${M.target_year}: % of normal`;
+      $("sum-map-title").textContent = `Precipitation, ${M.oct_label}, ${M.target_year}: % of typical (reference-period median)`;
       $("sum-map-legend").innerHTML = pctLegend();
       plot("sum-map", tr, mapLayout(bm, keep.map((r) => r.lon), keep.map((r) => r.lat)));
       if ($("sum-map").removeAllListeners) $("sum-map").removeAllListeners("plotly_click");
@@ -203,15 +228,64 @@
     if (l && fin(l.rho)) t += `; the longer record (${l.year_first}–${l.year_last}) ${verdict(l)}`;
     t += ".</p>";
     if (ex && fin(ex.target_expected) && fin(ex.target_observed)) {
-      const zq = (z) => z < -1.3 ? "much drier than normal" : z < -0.5 ? "drier than normal" : z <= 0.5 ? "near normal" : "wetter than normal";
+      const zq = (z) => z < -1.3 ? "much drier than typical" : z < -0.5 ? "drier than typical" : z <= 0.5 ? "near typical" : "wetter than typical";
       t += `<p>Given this year's ENSO state alone, the expected autumn was <b>${zq(ex.target_expected)}</b>; what happened was <b>${zq(ex.target_observed)}</b>. ` +
-        (fin(ex.target_rp_cond) && fin(ex.target_rp_uncond) ? `Taking ENSO into account, a season this dry is ${rpTxt(ex.target_rp_cond)}, compared with ${rpTxt(ex.target_rp_uncond)} without it (normal-distribution estimates, rough in the tails). ` : "") +
+        (fin(ex.target_rp_cond) && fin(ex.target_rp_uncond) ? `Taking ENSO into account, a season this dry is ${rpTxt(ex.target_rp_cond)}, compared with ${rpTxt(ex.target_rp_uncond)} without it (Gaussian estimates, rough in the tails). ` : "") +
         `ENSO explains about ${fmt(100 * (ex.r2 || 0))}% of the year-to-year variation in this measure, so most of what happens in any one autumn comes from weather patterns that ENSO does not control.</p>`;
     }
     t += '<p class="note">Details, other indices and seasons, and station-by-station results are in the ENSO tab.</p>';
     se.innerHTML = t;
   }
   function rpTxt(r) { return !fin(r) ? "–" : r > 200 ? "rarer than 1-in-200" : r < 2 ? "common (about 1-in-" + fmt(r, 1) + ")" : "about a 1-in-" + fmt(r) + " event"; }
+  // ------------------------------------------------------------ regions + "stations included" dialog
+  const REGCOL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+  function regionTraces() {
+    const G = M.regions_grid;
+    if (!G) return [];
+    const n = G.names.length;
+    const cs = [];
+    G.names.forEach((_, k) => { cs.push([k / n, REGCOL[k % 8]]); cs.push([(k + 1) / n, REGCOL[k % 8]]); });
+    return [{ type: "heatmap", x: G.x, y: G.y, z: G.z, zmin: -0.5, zmax: n - 0.5, colorscale: cs, showscale: false, opacity: 0.45, hoverongaps: false,
+      customdata: G.z.map((row) => row.map((v) => (v == null ? "" : G.names[v]))), hovertemplate: "%{customdata}<extra></extra>" },
+    { type: "scatter", mode: "text", x: G.labels.map((l) => l.lon), y: G.labels.map((l) => l.lat), text: G.labels.map((l) => "<b>" + esc(l.region) + "</b>"),
+      textfont: { size: 12, color: C().ink }, hoverinfo: "skip" }];
+  }
+  function stationSet(set) {
+    if (set === "temp" && T) return { title: "Temperature stations included", desc: `${T.units.unit_id.length} stations across ${M.domain_desc}, with a long enough record for daily maximum and minimum temperature.`,
+      rows: T.units.unit_id.map((id, i) => ({ id, name: T.units.name[i], region: T.units.region[i], lon: T.units.lon[i], lat: T.units.lat[i] })), bm: "precip", regions: true };
+    if (set === "water" && W) return { title: "River and lake gauges included", desc: `${W.rows.station.length} Water Survey of Canada gauges on ${M.water_desc}, ranked since ${W.baseline_start}.`,
+      rows: W.rows.station.map((id, i) => ({ id, name: W.rows.short[i], region: W.rows.param[i] === "flow" ? "river flow" : "water level", lon: W.rows.lon[i], lat: W.rows.lat[i] })), bm: "water", regions: false };
+    if (!P) return null;
+    const u = unitRows();
+    return { title: "Precipitation stations included", desc: `${u.length} stations across ${M.domain_desc}: Environment and Climate Change Canada stations with at least 12 complete reference years (${B[0]}–${B[1]}) and a complete ${M.target_year} record. Summary numbers use the ${u.filter((r) => r.status === "final").length} with a final ${M.target_year} record.`,
+      rows: u, bm: "precip", regions: true };
+  }
+  function stationMap(div, s, height) {
+    const bm = M.basemaps && (M.basemaps[s.bm] || M.basemaps.precip), c = C();
+    // heatmaps draw beneath scatter fills, so the land fill is dropped when regions colour the land
+    const G = M.regions_grid, withReg = s.regions && G && G.land_masked;
+    const tr = basemapTraces(bm, withReg).concat(s.regions && G ? regionTraces() : []);
+    tr.push({ x: s.rows.map((r) => r.lon), y: s.rows.map((r) => r.lat), mode: "markers", type: "scatter", marker: { size: 9, color: c.ink, line: { width: 1.5, color: c.surface } },
+      customdata: s.rows.map((r) => [r.name, r.region]), hovertemplate: "<b>%{customdata[0]}</b><br>%{customdata[1]}<extra></extra>" });
+    const ex = withReg ? { lon: [G.x[0], G.x[G.x.length - 1]], lat: [G.y[0], G.y[G.y.length - 1]] } : { lon: s.rows.map((r) => r.lon), lat: s.rows.map((r) => r.lat) };
+    const lay = mapLayout(bm, ex.lon, ex.lat);
+    if (height) lay.height = height;
+    plot(div, tr, lay);
+  }
+  function openStations(set) {
+    const s = stationSet(set);
+    if (!s) return;
+    const d = $("stdlg");
+    $("stdlg-title").textContent = s.title;
+    $("stdlg-desc").textContent = s.desc;
+    if (d.showModal) d.showModal(); else d.setAttribute("open", "");
+    stationMap("stdlg-map", s, 420);
+    const rows = s.rows.slice().sort((x, y) => (x.region > y.region ? 1 : x.region < y.region ? -1 : x.name > y.name ? 1 : -1));
+    table($("stdlg-table"), [{ t: "Station", k: "name" }, { t: set === "water" ? "Measures" : "Region", k: "region" }], rows);
+  }
+  $("stdlg-close").onclick = () => $("stdlg").close();
+  $("stdlg").addEventListener("click", (ev) => { if (ev.target === $("stdlg")) $("stdlg").close(); });
+
   function pctLegend() {
     const c = C().div;
     const labs = ["≤ 25%", "50%", "70%", "100%", "140%", "200%", "≥ 400%"];
@@ -256,7 +330,7 @@
     const v = $("m-var").value;
     if (v === "precip") {
       fillSelect($("m-metric"), P.metrics.map((m) => [m.key, m.label]), "total_oct");
-      fillSelect($("m-stat"), [["pct", "% of normal"], ["rank", "Rank (driest = 1)"], ["spi", "SPI"], ["diff", "Difference from normal"], ["value", "Value"]]);
+      fillSelect($("m-stat"), [["pct", "% of reference-period median"], ["rank", "Rank (driest = 1)"], ["spi", "SPI"], ["diff", "Difference from reference median"], ["value", "Value"]]);
       $("m-thr-wrap").style.display = "";
     } else {
       const opts = [];
@@ -310,7 +384,7 @@
     if ($("m-map").removeAllListeners) $("m-map").removeAllListeners("plotly_click");
     $("m-map").on("plotly_click", (ev) => { const p = ev.points.find((q) => q.customdata); if (p) gotoStation(p.customdata[3]); });
     $("m-legend").innerHTML = v === "precip" ? (($("m-stat").value === "rank") ? "<span>Colour: rank (red = driest end, blue = wettest end)</span>" : pctLegend()) :
-      "<span>Colour: blue = cooler, red = warmer than normal</span>";
+      "<span>Colour: blue = cooler, red = warmer than the reference period</span>";
     // ranked bars
     const sorted = rows.slice().sort((a, b) => (a.c ?? 0) - (b.c ?? 0));
     if (d.rev) sorted.reverse();
@@ -326,12 +400,12 @@
     // table
     const cols = v === "precip" ? [
       { t: "Station", k: "name" }, { t: "Region", k: "region" },
-      { t: `${M.target_year}`, k: "val", n: 1, f: (r) => fmt(r.val, 1) }, { t: "Normal", k: "med", n: 1, f: (r) => fmt(r.med, 1) },
-      { t: "% of normal", k: "pct", n: 1, f: (r) => fmt(r.pct) }, { t: "Rank (driest = 1)", k: "rank", n: 1, f: (r) => rankText(r.rank, r.n, "driest") },
+      { t: `${M.target_year}`, k: "val", n: 1, f: (r) => fmt(r.val, 1) }, { t: "Ref. median", k: "med", n: 1, f: (r) => fmt(r.med, 1) },
+      { t: "% of ref. median", k: "pct", n: 1, f: (r) => fmt(r.pct) }, { t: "Rank (driest = 1)", k: "rank", n: 1, f: (r) => rankText(r.rank, r.n, "driest") },
       { t: "SPI", k: "spi", n: 1, f: (r) => sgn(r.spi, 2) }, { t: "Return period (yr)", k: "rp", n: 1, f: (r) => !fin(r.rp) ? "–" : r.rp > 10 * (r.n || 27) ? "> " + 10 * (r.n || 27) + " (beyond data)" : fmt(r.rp, 1) },
     ] : [
       { t: "Station", k: "name" }, { t: "Region", k: "region" }, { t: `${M.target_year} (°C)`, k: "val", n: 1, f: (r) => fmt(r.val, 1) },
-      { t: "Normal", k: "med", n: 1, f: (r) => fmt(r.med, 1) }, { t: "Anomaly", k: "anom", n: 1, f: (r) => sgn(r.anom) },
+      { t: "Ref. mean", k: "med", n: 1, f: (r) => fmt(r.med, 1) }, { t: "Anomaly", k: "anom", n: 1, f: (r) => sgn(r.anom) },
       { t: "Rank (warmest = 1)", k: "rank", n: 1, f: (r) => rankText(r.rank, r.n, "warmest") },
     ];
     table($("m-table"), cols, sorted);
@@ -393,7 +467,7 @@
       return g ? { label: mi.label, unit: mi.unit, val: g.value[i], med: g.baseline_median[i], pct: g.pct_of_median[i], rank: g.rank_dry[i], n: g.n_years[i], dry: mi.dry } : null;
     }).filter((r) => r && fin(r.val));
     table($("s-table"), [{ t: "Measure", k: "label" }, { t: `${M.target_year}`, k: "val", n: 1, f: (r) => fmt(r.val, 1) + " " + esc(r.unit) },
-      { t: "Normal", k: "med", n: 1, f: (r) => fmt(r.med, 1) }, { t: "% of normal", k: "pct", n: 1, f: (r) => fmt(r.pct) },
+      { t: "Ref. median", k: "med", n: 1, f: (r) => fmt(r.med, 1) }, { t: "% of ref. median", k: "pct", n: 1, f: (r) => fmt(r.pct) },
       { t: "Rank (driest end = 1)", k: "rank", n: 1, f: (r) => rankText(r.rank, r.n, "driest") }], rows);
   }
 
@@ -422,7 +496,7 @@
       const g = rows.filter((r) => r.param === par);
       tr.push({ x: g.map((r) => r.lon), y: g.map((r) => r.lat), type: "scatter", mode: "markers",
         marker: { symbol: par === "flow" ? "circle" : "square", size: 15, color: g.map((r) => WCOL[r.cat]), line: { width: g.map((r) => (r.reg ? 2.4 : 0.7)), color: c.ink } },
-        customdata: g.map((r) => [r.name, rankText(r.rank, r.n, "lowest").replace("1st lowest", "lowest"), par === "flow" ? fmt(r.pct) + "% of normal flow" : sgn(r.diff, 2) + " m from normal level", r.regtxt, r.lower ? "last lower: " + r.lower : "no lower year"]),
+        customdata: g.map((r) => [r.name, rankText(r.rank, r.n, "lowest").replace("1st lowest", "lowest"), par === "flow" ? fmt(r.pct) + "% of typical flow" : sgn(r.diff, 2) + " m from typical level", r.regtxt, r.lower ? "last lower: " + r.lower : "no lower year"]),
         hovertemplate: "<b>%{customdata[0]}</b><br>%{customdata[1]} " + sinceTxt + "<br>%{customdata[2]}<br>%{customdata[4]}<br>%{customdata[3]}<extra></extra>" });
     }
     plot("w-map", tr, mapLayout(bm, rows.map((r) => r.lon), rows.map((r) => r.lat)));
@@ -436,12 +510,12 @@
       baseLayout({ margin: { l: 190, r: 10, t: 4, b: 40 }, height: Math.max(420, 18 * sorted.length + 60), xaxis: Object.assign(baseLayout().xaxis, { title: { text: "rank (1 = lowest); grey = years of record" }, rangemode: "tozero" }),
         yaxis: Object.assign(baseLayout().yaxis, { autorange: "reversed", tickfont: { size: 10.5 } }) }));
     table($("w-table"), [{ t: "Gauge", k: "name" }, { t: "Measures", k: "param", f: (r) => (r.param === "flow" ? "flow" : "level") },
-      { t: "Rank " + sinceTxt, k: "rank", n: 1, f: (r) => rankText(r.rank, r.n, "lowest") }, { t: "% of normal flow", k: "pct", n: 1, f: (r) => (r.param === "flow" ? fmt(r.pct) : "–") },
-      { t: "Level vs normal (m)", k: "diff", n: 1, f: (r) => (r.param === "level" ? sgn(r.diff, 2) : "–") }, { t: "Last lower year", k: "lower", n: 1, f: (r) => r.lower || "–" },
+      { t: "Rank " + sinceTxt, k: "rank", n: 1, f: (r) => rankText(r.rank, r.n, "lowest") }, { t: "% of typical flow", k: "pct", n: 1, f: (r) => (r.param === "flow" ? fmt(r.pct) : "–") },
+      { t: "Level vs typical (m)", k: "diff", n: 1, f: (r) => (r.param === "level" ? sgn(r.diff, 2) : "–") }, { t: "Last lower year", k: "lower", n: 1, f: (r) => r.lower || "–" },
       { t: "Record since", k: "first", n: 1 }, { t: "Regulation", k: "regtxt" }, { t: "Provisional days", k: "prov", n: 1 }], sorted);
     const h = (M.headline || {}).water;
     if (h) $("w-lead").innerHTML = `Of ${h.n} river and lake gauges on south and central Vancouver Island, <b>${h.n_lowest}</b> had their lowest ${M.oct_label} since ${h.baseline_start}, ` +
-      `<b>${h.n_top3 - h.n_lowest}</b> their 2nd or 3rd lowest, and in all <b>${h.n_low_quarter}</b> were in the lowest quarter of years. The median river carried ${fmt(h.flow_pct_median)}% of its normal flow.`;
+      `<b>${h.n_top3 - h.n_lowest}</b> their 2nd or 3rd lowest, and in all <b>${h.n_low_quarter}</b> were in the lowest quarter of years. The median river carried ${fmt(h.flow_pct_median)}% of its typical flow (median since ${h.baseline_start}).`;
     const pngs = (M.figures || []).filter((f) => f.startsWith("water_ranks"));
     $("w-fig").innerHTML = pngs.length ? "Print-ready map: " + pngs.map((f) => `<a href="figures/${esc(f)}">${esc(f)}</a>`).join(", ") : "";
   }
@@ -463,7 +537,7 @@
         text: rr.map((x) => x.name), hovertemplate: "%{text}: %{y:.0f}%<extra></extra>" };
     });
     plot("c-region", tr, baseLayout({ shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 100, y1: 100, line: { color: c.ink2, dash: "dash", width: 1 } }],
-      yaxis: Object.assign(baseLayout().yaxis, { title: { text: "% of normal" }, range: [0, Math.max(115, 1.08 * Math.max(...u.map((x) => g.pct_of_median[x.i]).filter(fin)))] }), margin: { l: 52, r: 10, t: 10, b: 70 } }));
+      yaxis: Object.assign(baseLayout().yaxis, { title: { text: "% of reference-period median" }, range: [0, Math.max(115, 1.08 * Math.max(...u.map((x) => g.pct_of_median[x.i]).filter(fin)))] }), margin: { l: 52, r: 10, t: 10, b: 70 } }));
     const ranks = u.map((x) => g.rank_dry[x.i]).filter(fin).map(Math.round);
     const nmax = Math.max(...u.map((x) => g.n_years[x.i]).filter(fin), 1);
     const counts = Array.from({ length: nmax }, (_, k) => ranks.filter((r) => r === k + 1).length);
@@ -479,7 +553,7 @@
         return { x: q.map((x) => aN.value[x.i]), y: q.map((x) => aI.value[x.i]), mode: "markers", name: reg, marker: { size: 9, line: { width: 1, color: c.surface } }, text: q.map((x) => x.name), hovertemplate: "%{text}<br>frequency %{x:+.2f}, intensity %{y:+.2f}<extra>" + esc(reg) + "</extra>" };
       });
       plot("c-ni", traces, baseLayout({ showlegend: true, legend: { orientation: "h", y: -0.18, font: { size: 11 } }, colorway: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"],
-        xaxis: Object.assign(baseLayout().xaxis, { title: { text: "ln(wet days / normal)" }, range: [-lim, lim], zeroline: true }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: "ln(intensity / normal)" }, range: [-lim, lim], zeroline: true }),
+        xaxis: Object.assign(baseLayout().xaxis, { title: { text: "ln(wet days / reference)" }, range: [-lim, lim], zeroline: true }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: "ln(intensity / reference)" }, range: [-lim, lim], zeroline: true }),
         shapes: [-1, -0.5, 0, 0.5].map((k) => ({ type: "line", x0: -lim, x1: lim, y0: k + lim, y1: k - lim, line: { color: c.grid, width: 1, dash: "dot" } })),
         margin: { l: 56, r: 10, t: 10, b: 90 } }));
     }
@@ -487,7 +561,7 @@
       const q = u.filter((x) => x.region === r && fin(g.pct_of_median[x.i]));
       return { r, n: q.length, pct: median(q.map((x) => g.pct_of_median[x.i])), top3: q.filter((x) => g.rank_dry[x.i] <= 3).length, rank: median(q.map((x) => g.rank_dry[x.i])) };
     });
-    table($("c-table"), [{ t: "Region", k: "r" }, { t: "Stations", k: "n", n: 1 }, { t: "Median % of normal", k: "pct", n: 1, f: (x) => fmt(x.pct) }, { t: "Top-3 driest", k: "top3", n: 1 }, { t: "Median rank", k: "rank", n: 1, f: (x) => fmt(x.rank, 1) }], reg);
+    table($("c-table"), [{ t: "Region", k: "r" }, { t: "Stations", k: "n", n: 1 }, { t: "Median % of ref. median", k: "pct", n: 1, f: (x) => fmt(x.pct) }, { t: "Top-3 driest", k: "top3", n: 1 }, { t: "Median rank", k: "rank", n: 1, f: (x) => fmt(x.rank, 1) }], reg);
   }
 
   // ------------------------------------------------------------ ENSO
@@ -619,6 +693,8 @@
 
   // ------------------------------------------------------------ METHODS
   function renderMethods() {
+    const s = stationSet("precip");
+    if (s) stationMap("meth-regions", s);
     $("downloads").innerHTML = (M.csv || []).length ? "<ul>" + M.csv.map((f) => `<li><a href="data/csv/${esc(f)}" download>${esc(f)}</a></li>`).join("") + "</ul>" : '<p class="note">No tables.</p>';
     const kv = [["Target period", `${M.window_label}, ${M.target_year}`], ["Reference years", `${B[0]}–${B[1]}`], ["Data source", (M.vintage && M.vintage.source) || "–"],
       ["Data downloaded", (M.vintage && M.vintage.built) || "–"], ["Page built", M.built || "–"], ["Components", Object.keys(M.have || {}).filter((k) => M.have[k]).join(", ")]];

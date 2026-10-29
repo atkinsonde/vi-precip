@@ -137,3 +137,12 @@ enso:
   min_units_river: 5
   min_years_station: 15
   min_years_long: 30
+
+site:
+  title: "South Coast Climate Explorer"
+  tagline: "Temperature, precipitation and river flow in coastal British Columbia, with ENSO"
+  feature: "Autumn {year}: how dry, and why?"     # the current focus; {year} = target year
+  author: "David E Atkinson"
+  affiliation: "Dept of Geography, University of Victoria"
+  domain_desc: "Vancouver Island, the Gulf Islands, the Sunshine Coast, Sea-to-Sky to Whistler and the Lower Mainland to Hope"
+  water_desc: "south and central Vancouver Island (south of 49.8° N)"

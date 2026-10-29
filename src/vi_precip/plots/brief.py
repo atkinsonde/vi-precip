@@ -33,18 +33,18 @@ def regional_bars(reg: pd.DataFrame, path: Path, end: dt.date) -> Path:
                 ax.annotate(f"{v:.0f}", (b.get_x() + b.get_width() / 2, v), xytext=(0, 2), textcoords="offset points",
                             ha="center", fontsize=6.5, color=style.TEXT_2)
     ax.axhline(100, color=style.TEXT_2, lw=0.8, ls=(0, (4, 3)), zorder=2)
-    ax.annotate("normal (2000–2025 median)", (len(reg) - 0.5, 100), xytext=(0, 3), textcoords="offset points",
+    ax.annotate("reference period (2000–2025 median)", (len(reg) - 0.5, 100), xytext=(0, 3), textcoords="offset points",
                 ha="right", fontsize=7, color=style.TEXT_2)
     ax.set_xticks(x)
     ax.set_xticklabels([f"{r}\n({int(n)} station{'s' if int(n) != 1 else ''})" for r, n in zip(reg.index, reg["n"])],
                        fontsize=7.5)
-    ax.set_ylabel("% of normal")
+    ax.set_ylabel("% of reference-period median")
     ax.set_ylim(0, max(120, np.nanmax(reg[["sep", "oct", "window"]].to_numpy()) * 1.12))
     ax.grid(axis="y", color=style.GRID, lw=0.6, zorder=0)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     ax.legend(loc="upper left", ncol=3, frameon=False)
-    ax.set_title("Precipitation as % of normal, median of stations in each region", loc="left")
+    ax.set_title("Precipitation as % of the reference-period median, median of stations in each region", loc="left")
     fig.tight_layout()
     fig.savefig(path, dpi=200)
     plt.close(fig)

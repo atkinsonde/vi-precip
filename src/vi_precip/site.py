@@ -47,7 +47,7 @@ PRECIP_MAP_METRICS = [  # metric, label, unit, family
 ]
 STATION_SERIES = ["total_window", "total_oct", "total_sep", "driest30_mm", "n_wet_scaled", "sdii", "spell_max_win"]
 TEMP_VARS = {"tmax": "Daily maximum", "tmin": "Daily minimum", "dtr": "Diurnal range"}
-WATER_CATS = ["Lowest since {b}", "2nd or 3rd lowest", "Among the lowest quarter", "Near normal (middle half)",
+WATER_CATS = ["Lowest since {b}", "2nd or 3rd lowest", "Among the lowest quarter", "Near typical (middle half)",
               "Higher than usual"]
 ENSO_METRIC_LABELS = {
     "total_window": "Sep 1–{e} precipitation", "total_oct": "Oct 1–{d} precipitation", "total_sep": "September precipitation",
@@ -202,7 +202,7 @@ class SiteBuilder:
         vals = {}
         for (v, per), g in an.groupby(["var", "period"]):
             g = g.set_index("unit_id").reindex(ids).reset_index()
-            vals[f"{v}|{per}"] = _cols(g, ["value", "base_mean", "anom", "z", "rank_high", "rank_low", "n_years",
+            vals[f"{v}|{per}"] = _cols(g, ["value", "base_mean", "anom", "z", "rank_high", "rank_low", "n_years", "pctl",
                                            "record_high", "record_low", "tier"])
         out = {"units": _cols(u, ["unit_id", "name", "region", "lon", "lat", "elev_m", "kind"]), "values": vals,
                "vars": TEMP_VARS}
@@ -376,14 +376,16 @@ class SiteBuilder:
                 "window_rp_median": float(np.nanmedian(rp)) if np.isfinite(rp).any() else None,
                 "sep_pct_median": float(np.nanmedian(s)) if len(s) else None,
                 "wet_days": float(np.nanmedian(arr("n_wet_scaled", "value"))) if len(arr("n_wet_scaled", "value")) else None,
-                "wet_days_normal": float(np.nanmedian(arr("n_wet_scaled", "baseline_median"))) if len(arr("n_wet_scaled", "value")) else None,
+                "wet_days_typical": float(np.nanmedian(arr("n_wet_scaled", "baseline_median"))) if len(arr("n_wet_scaled", "value")) else None,
             }
         if temp:
             v = temp["values"].get("tmax|oct")
             if v:
                 a = np.array([np.nan if x is None else x for x in v["anom"]], float)
                 r = np.array([np.nan if x is None else x for x in v["rank_high"]], float)
+                pc = np.array([np.nan if x is None else x for x in v.get("pctl", [])], float)
                 h["temp"] = {"n": int(np.isfinite(a).sum()), "tmax_oct_anom": float(np.nanmedian(a)),
+                             "tmax_oct_above_median": int(np.nansum(pc > 50)) if len(pc) else None,
                              "tmax_oct_warmer": int(np.nansum(a > 0)), "tmax_oct_top3": int(np.nansum(r <= 3))}
                 t2 = temp["values"].get("tmin|oct")
                 if t2:
@@ -397,13 +399,74 @@ class SiteBuilder:
                           "baseline_start": water["baseline_start"]}
         if enso:
             s = enso["summary"]
-            h["enso"] = {"index": s["target_index"], "primary": s["primary"]}
+            h["enso"] = {"index": s["target_index"], "primary": s["primary"], "state": self.enso_state()}
             rg = [r for r in enso["regressions"] if r.get("model") == "enso" and r.get("region") in ("island",)
                   and r.get("metric") == "total_window"]
             h["enso"]["expected"] = {r["record"]: {k: r.get(k) for k in ("target_expected", "target_lo90", "target_hi90",
                                                                            "target_observed", "target_rp_cond",
                                                                            "target_rp_uncond", "r2")} for r in rg}
         return h
+
+    def enso_state(self) -> dict | None:
+        """Strength from the latest 3-month mean Nino 3.4 (ONI-style thresholds) and the 3-month change."""
+        m = _read(self.pdir / "indices_monthly.parquet")
+        if m is None:
+            return None
+        g = m[m["index"] == "nino34"].sort_values(["year", "month"])
+        if len(g) < 6:
+            return None
+        v = g["value"].to_numpy(float)
+        last3, prev = float(v[-3:].mean()), float(v[-4])
+        y, mo = int(g["year"].iloc[-1]), int(g["month"].iloc[-1])
+        a = abs(last3)
+        phase = "El Niño" if last3 >= 0.5 else "La Niña" if last3 <= -0.5 else "Neutral"
+        strength = None if phase == "Neutral" else \
+            "very strong" if a >= 2.0 else "strong" if a >= 1.5 else "moderate" if a >= 1.0 else "weak"
+        d = float(v[-1] - prev)  # latest month minus three months earlier
+        towards = d if last3 >= 0 else -d  # positive = moving away from zero
+        if phase == "Neutral":
+            trend = "warming" if d >= 0.3 else "cooling" if d <= -0.3 else "steady"
+        else:
+            trend = "strengthening" if towards >= 0.3 else "weakening" if towards <= -0.3 else "steady"
+        mon = dt.date(y, mo, 1).strftime("%b")
+        return {"phase": phase, "strength": strength, "trend": trend, "last3": last3, "latest": float(v[-1]),
+                "change3": d, "latest_month": f"{mon} {y}",
+                "months3": "–".join(dt.date(int(r.year), int(r.month), 1).strftime("%b") for r in g.tail(3).itertuples()),
+                "rule": "strength from the latest 3-month mean Niño 3.4 (weak 0.5, moderate 1.0, strong 1.5, very strong "
+                        "2.0 °C); trend from the latest month minus three months earlier (±0.3 °C)"}
+
+    def regions(self, bm: dict) -> dict:
+        """Region of every land cell on a 0.025° grid (exact: uses the same assignment as the analysis)."""
+        from matplotlib.path import Path as MplPath
+
+        dom = self.cfg.spatial
+        x0, y0, x1, y1 = dom.bbox
+        step = 0.025
+        xs = np.round(np.arange(x0, x1 + step / 2, step), 4)
+        ys = np.round(np.arange(y0, y1 + step / 2, step), 4)
+        X, Y = np.meshgrid(xs, ys)
+        names = np.asarray(dom.assign(X.ravel(), Y.ravel()), dtype=object)
+        if bm.get("land"):
+            land = np.zeros(X.size, bool)
+            pts = np.column_stack([X.ravel(), Y.ravel()])
+            for ring in bm["land"]:
+                r = np.asarray(ring)
+                if len(r) < 3 or r[:, 0].max() < x0 or r[:, 0].min() > x1 or r[:, 1].max() < y0 or r[:, 1].min() > y1:
+                    continue
+                land |= MplPath(r).contains_points(pts)
+            names[~land] = None
+        regs = dom.region_names
+        code = {r: i for i, r in enumerate(regs)}
+        z = np.array([code.get(n, -1) if n is not None else -1 for n in names]).reshape(X.shape)
+        labels = []
+        for i, r in enumerate(regs):
+            hit = z == i
+            if hit.any():
+                labels.append({"region": r, "lon": float(np.median(X[hit])), "lat": float(np.median(Y[hit])),
+                               "n_cells": int(hit.sum())})
+        zz = [[None if v < 0 else int(v) for v in row] for row in z]
+        return {"x": xs.tolist(), "y": ys.tolist(), "z": zz, "names": regs, "labels": labels,
+                "land_masked": bool(bm.get("land"))}
 
     def _csv(self, df: pd.DataFrame, name: str) -> None:
         p = self.out / "data" / "csv" / name
@@ -416,8 +479,15 @@ class SiteBuilder:
         src = resources.files("vi_precip") / "site_assets"
         for f in ("app.js", "style.css"):
             (a / f).write_text((src / f).read_text(encoding="utf-8"), encoding="utf-8")
+        for f in ("logo_uvic_geog_navy.png", "logo_uvic_geog_blue.png"):
+            if (src / f).is_file():
+                (a / f).write_bytes((src / f).read_bytes())
         html = (src / "index.html").read_text(encoding="utf-8")
-        (self.out / "index.html").write_text(html.replace("{{TITLE}}", self.title()), encoding="utf-8")
+        S = self.site_text()
+        for k, v in {"TITLE": self.title(), "MAIN": S["title"], "TAGLINE": S["tagline"], "FEATURE": S["feature"],
+                     "AUTHOR": S["author"], "AFFIL": S["affiliation"]}.items():
+            html = html.replace("{{" + k + "}}", v)
+        (self.out / "index.html").write_text(html, encoding="utf-8")
         pj = a / "plotly.min.js"
         if not pj.exists() or pj.stat().st_size < 1_000_000:
             try:
@@ -432,8 +502,20 @@ class SiteBuilder:
         for p in list(self.cfg.figures_dir.glob("water_ranks_*.png")) + list((self.cfg.out_dir / "brief" / "figures").glob("*.png")):
             shutil.copy(p, figs / p.name)
 
+    def site_text(self) -> dict:
+        import html as H
+
+        d = {"title": "South Coast Climate Explorer",
+             "tagline": "Temperature, precipitation and river flow in coastal British Columbia, with ENSO",
+             "feature": "Autumn {year}: how dry, and why?", "author": "David E Atkinson",
+             "affiliation": "Dept of Geography, University of Victoria"}
+        d |= {k: str(v) for k, v in (self.cfg.raw.get("site") or {}).items() if k in d}
+        d["feature"] = d["feature"].format(year=self.cfg.target_year)
+        return {k: H.escape(v) for k, v in d.items()}
+
     def title(self) -> str:
-        return f"Autumn {self.cfg.target_year}: how dry, and why? South Coast BC"
+        S = self.site_text()
+        return f"{S['title']} · {S['feature']}"
 
     def build(self) -> Path:
         self.out.mkdir(parents=True, exist_ok=True)
@@ -461,7 +543,11 @@ class SiteBuilder:
             bms["enso"] = _basemap(self.cfg, [sm["lon"].min() - 0.5, sm["lat"].min() - 0.3,
                                               sm["lon"].max() + 0.5, sm["lat"].max() + 0.3])
         meta = {
-            "title": self.title(), "target_year": self.cfg.target_year, "end_date": e.isoformat(),
+            "title": self.title(), "regions_grid": self.regions(bms["precip"]),
+            "domain_desc": (self.cfg.raw.get("site") or {}).get("domain_desc",
+                "Vancouver Island, the Gulf Islands, the Sunshine Coast, Sea-to-Sky to Whistler and the Lower Mainland to Hope"),
+            "water_desc": (self.cfg.raw.get("site") or {}).get("water_desc",
+                "south and central Vancouver Island (south of 49.8° N)"), "target_year": self.cfg.target_year, "end_date": e.isoformat(),
             "end_label": f"{e:%b} {e.day}", "oct_label": f"Oct 1–{e.day}", "window_label": f"Sep 1–{e:%b} {e.day}",
             "baseline": list(self.cfg.baseline), "thresholds": self.cfg.wet_thresholds,
             "regions": self.cfg.spatial.region_names, "vi_regions": VI_REGIONS,

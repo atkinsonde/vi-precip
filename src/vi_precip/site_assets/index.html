@@ -14,9 +14,14 @@
 </head>
 <body>
 <header class="top">
-  <div>
-    <h1 id="title">{{TITLE}}</h1>
-    <div class="sub" id="vintage"></div>
+  <a class="logo" href="https://www.uvic.ca/socialsciences/geography/" aria-label="University of Victoria, Department of Geography">
+    <img class="logo-light" src="assets/logo_uvic_geog_navy.png" alt="UVic Geography" width="246" height="40">
+    <img class="logo-dark" src="assets/logo_uvic_geog_blue.png" alt="UVic Geography" width="246" height="40">
+  </a>
+  <div class="titles">
+    <h1 id="title">{{MAIN}}</h1>
+    <div class="tagline">{{TAGLINE}}</div>
+    <div class="byline">{{AUTHOR}}, {{AFFIL}}</div>
   </div>
   <div class="spacer"></div>
   <button id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
@@ -34,11 +39,12 @@
   <div id="synthetic"></div>
 
   <section class="tab" id="tab-summary">
+    <div class="feature"><span class="eyebrow">Current focus</span><h2>{{FEATURE}}</h2><div class="sub" id="vintage"></div></div>
     <p class="lead" id="sum-lead"></p>
     <div class="tiles" id="sum-tiles"></div>
     <div class="grid2">
       <div class="card">
-        <h3 id="sum-map-title">Precipitation compared with normal</h3>
+        <h3 id="sum-map-title">Precipitation compared with the reference period</h3>
         <div class="legend" id="sum-map-legend"></div>
         <div class="plot map" id="sum-map"></div>
         <p class="note">Each dot is a weather station with a long enough record. Hover for details; click to open the station.</p>
@@ -160,6 +166,10 @@
   </section>
 
   <section class="tab methods" id="tab-methods">
+    <h2>Regions and stations</h2>
+    <p class="note">Regions as used in the analysis (land coloured by the same rules that assign each station; a few borderline
+      stations are reassigned by hand in <code>config/region_overrides.csv</code>). Dots: precipitation stations used in this build.</p>
+    <div class="card"><div class="plot map" id="meth-regions"></div></div>
     <h2>Data</h2>
     <ul>
       <li>Daily precipitation and temperature: Environment and Climate Change Canada (ECCC), MSC GeoMet OGC API,
@@ -171,8 +181,9 @@
     </ul>
     <h2>Precipitation</h2>
     <ul>
-      <li>Target period: September 1 to the end date; the same calendar dates are used in every year. Normal = 2000–2025 (the
-        target year is never part of its own reference).</li>
+      <li>Target period: September 1 to the end date; the same calendar dates are used in every year. Reference period = 2000–2025; "typical" means the
+        reference-period median for the same calendar dates (not ECCC's official 1991–2020 climate normals). The target year is
+        never part of its own reference.</li>
       <li>A period total counts if no more than 2 days are missing. Multi-day accumulations (flag A, and the "C" days that precede them)
         count fully in totals but not in day-by-day measures. Trace (T) = 0 mm.</li>
       <li>Stations: Tier 1 ≥ 22 valid reference years, Tier 2 ≥ 12, both with a valid target period. Stations whose ID changed at the same
@@ -194,7 +205,7 @@
     </ul>
     <h2>ENSO correspondence</h2>
     <ul>
-      <li>Every station series is converted to rank-based normal scores; regional series are the mean score, re-scored.</li>
+      <li>Every station series is converted to rank-based standard scores (z-scores from ranks); regional series are the mean score, re-scored.</li>
       <li>Primary test, fixed in advance: Vancouver Island Sep 1–end precipitation against Jul–Sep Niño 3.4, one-sided (El Niño → drier),
         linear trends removed, Spearman correlation, permutation p-value. Repeated on the long record (1950 onward) as a check.</li>
       <li>All other combinations (seasons × indices × measures × records) are exploratory and controlled with Benjamini–Hochberg FDR.
@@ -209,6 +220,12 @@
     <div id="buildinfo" class="kv"></div>
   </section>
 </main>
+<dialog id="stdlg" aria-labelledby="stdlg-title">
+  <div class="dlg-head"><h3 id="stdlg-title">Stations included</h3><button type="button" id="stdlg-close" aria-label="Close">✕</button></div>
+  <p class="note" id="stdlg-desc"></p>
+  <div class="plot" id="stdlg-map" style="min-height:420px"></div>
+  <div class="tablewrap" id="stdlg-table" style="max-height:220px"></div>
+</dialog>
 <footer>
   Data: Environment and Climate Change Canada; Water Survey of Canada; NOAA PSL/CPC. Provisional data are subject to revision.
   Analysis code: vi-precip. <span id="foot-built"></span>

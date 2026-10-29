@@ -98,10 +98,10 @@ def run_brief(cfg: Config) -> Path:
     bbox = tuple(cfg.domain["bbox"])
     maps = {}
     spec = [
-        ("total_oct", f"Oct 1–{end.day}, {y}: precipitation compared with 2000–2025 (label: % of normal)"),
-        ("total_window", f"Sep 1–{endlab}, {y}: precipitation compared with 2000–2025 (label: % of normal)"),
-        ("total_sep", f"September {y}: precipitation compared with 2000–2025 (label: % of normal)"),
-        ("driest30_mm", f"Driest 30 days between Sep 1 and {endlab}, {y}, compared with 2000–2025 (label: % of normal)"),
+        ("total_oct", f"Oct 1–{end.day}, {y}: precipitation compared with 2000–2025 (label: % of reference-period median)"),
+        ("total_window", f"Sep 1–{endlab}, {y}: precipitation compared with 2000–2025 (label: % of reference-period median)"),
+        ("total_sep", f"September {y}: precipitation compared with 2000–2025 (label: % of reference-period median)"),
+        ("driest30_mm", f"Driest 30 days between Sep 1 and {endlab}, {y}, compared with 2000–2025 (label: % of reference-period median)"),
     ]
     mw = wide.copy()
     mw["region"] = mw["region"].astype(str)
@@ -170,9 +170,9 @@ def run_brief(cfg: Config) -> Path:
     for _, r in fin.sort_values(["region", "total_oct__pct_of_median"]).iterrows():
         rows.append({
             "Station": r["name"].replace(" (composite)", "").title(), "Region": REGION_LABEL.get(str(r["region"]), str(r["region"])),
-            f"Oct 1–{end.day} mm": r["total_oct__value"], "Oct % normal": r["total_oct__pct_of_median"],
+            f"Oct 1–{end.day} mm": r["total_oct__value"], "Oct % of ref. median": r["total_oct__pct_of_median"],
             "Oct rank": _rank_txt(r["total_oct__rank_dry"], r["total_oct__n_years"]),
-            f"Sep 1–{endlab} mm": r["total_window__value"], "Sep–Oct % normal": r["total_window__pct_of_median"],
+            f"Sep 1–{endlab} mm": r["total_window__value"], "Sep–Oct % of ref. median": r["total_window__pct_of_median"],
             "Sep–Oct rank": _rank_txt(r["total_window__rank_dry"], r["total_window__n_years"]),
             "Driest 30 days mm": r.get("driest30_mm__value"),
             "Driest 30 days": f"{_fmt_date(r.get('driest30_start'))}–{_fmt_date(r.get('driest30_end'))}",
@@ -212,7 +212,7 @@ def _html(cfg, h, reg, st, prov, maps, bars, cum, built) -> str:
     def adj(pct):
         if not np.isfinite(pct):
             return "unknown"
-        return "very dry" if pct < 50 else "dry" if pct < 80 else "near normal" if pct <= 120 else "wet"
+        return "very dry" if pct < 50 else "dry" if pct < 80 else "near typical" if pct <= 120 else "wet"
 
     rp = h["window_rp_emp_median"]
     nyw = h["window_median_nyears"]
@@ -225,7 +225,7 @@ def _html(cfg, h, reg, st, prov, maps, bars, cum, built) -> str:
     if np.isfinite(h["a_N"]) and np.isfinite(h["a_I"]):
         if abs(h["a_N"]) >= abs(h["a_I"]):
             cause = (f"<b>Mostly fewer rainy days</b> rather than lighter rain: about {_num(h['wet_days_2026'])} days "
-                     f"with at least 1 mm against a normal {_num(h['wet_days_normal'])} "
+                     f"with at least 1 mm against a typical {_num(h['wet_days_normal'])} "
                      f"({_num(100 * (np.exp(h['a_N']) - 1), 0, True, True)} for rainy days, "
                      f"{_num(100 * (np.exp(h['a_I']) - 1), 0, True, True)} for rain per rainy day; medians across stations).")
         else:
@@ -236,27 +236,27 @@ def _html(cfg, h, reg, st, prov, maps, bars, cum, built) -> str:
         cause = ""
     bullets = [
         f"<b>October 1–{end.day} was {adj(h['oct_median_pct'])}.</b> Across {h['n_final']} stations with complete records, "
-        f"precipitation was a median <b>{_num(h['oct_median_pct'], 0, True)}</b> of normal (range "
+        f"precipitation was a median <b>{_num(h['oct_median_pct'], 0, True)}</b> of the reference-period median (range "
         f"{_num(h['oct_min_pct'])}–{_num(h['oct_max_pct'], 0, True)}). It was among the three driest October 1–{end.day} "
         f"periods since 2000 at <b>{h['oct_n_top3']} of {h['n_final']}</b> stations, and the driest since 2000 at "
         f"{h['oct_n_rank1']} ({e(rec)}).",
-        f"<b>September was {adj(h['sep_median_pct'])}</b> (median {_num(h['sep_median_pct'], 0, True)} of normal).",
+        f"<b>September was {adj(h['sep_median_pct'])}</b> (median {_num(h['sep_median_pct'], 0, True)} of the reference-period median).",
         f"<b>September 1–{endlab} as a whole was {adj(h['window_median_pct'])}:</b> median "
-        f"{_num(h['window_median_pct'], 0, True)} of normal, typically "
+        f"{_num(h['window_median_pct'], 0, True)} of the reference-period median, typically "
         f"{'the driest' if h['window_median_rank'] <= 1 else 'the ' + _ord(h['window_median_rank']) + ' driest'} of "
         f"{int(nyw)} years; {rarity}.",
         f"<b>The driest 30 days</b> between September 1 and {endlab} brought a median {_num(h['driest30_median_pct'], 0, True)} "
-        f"of what each year’s driest 30 days normally bring, and ranked among the three driest since 2000 at "
+        f"of what each year’s driest 30 days typically bring, and ranked among the three driest since 2000 at "
         f"{h['driest30_n_top3']} of {h['n_final']} stations.{typical}",
         cause,
         f"<b>Dry spells:</b> the longest run of days with less than 1 mm was a median {_num(h['spell_2026'])} days against a "
-        f"normal {_num(h['spell_normal'])}, among the three longest since 2000 at {h['spell_n_top3']} stations.",
+        f"typical {_num(h['spell_normal'])}, among the three longest since 2000 at {h['spell_n_top3']} stations.",
         f"<b>Regionally</b>, October was driest in {e(h['driest_region'])} (median {_num(h['driest_region_pct'], 0, True)}) and "
         f"least dry in {e(h['wettest_region'])} (median {_num(h['wettest_region_pct'], 0, True)}).",
     ]
     bullets = [x for x in bullets if x]
     caveats = [
-        "“Normal” here is each station’s 2000–2025 median for the same calendar dates, not Environment Canada’s 1991–2020 normals.",
+        "“Typical” and “reference period” refer to each station’s 2000–2025 median for the same calendar dates, not Environment Canada’s official 1991–2020 climate normals.",
         "Ranks and “driest” refer to the years 2000–2026 only. Several stations have records back to the 1890s–1940s that are not yet in this comparison, so these are not all-time records.",
         f"Recent data are preliminary. Staffed stations report late, so rain on the last days before {endlab} may be missing at some of them"
         + (f"; {h['n_provisional']} stations are held back as provisional for that reason and are shown separately." if h["n_provisional"] else "."),
@@ -268,7 +268,7 @@ def _html(cfg, h, reg, st, prov, maps, bars, cum, built) -> str:
         if path:
             fig_html.append(f'<figure><img src="{_img(path)}" alt="{e(cap)}"><figcaption>{e(cap)}</figcaption></figure>')
 
-    fig(maps.get("total_oct"), f"October 1–{end.day}: each dot is a station, coloured by how 2026 ranks among 2000–2025 (red = drier). Labels give % of normal. Diamonds are provisional.")
+    fig(maps.get("total_oct"), f"October 1–{end.day}: each dot is a station, coloured by how 2026 ranks among 2000–2025 (red = drier). Labels give % of the reference-period median. Diamonds are provisional.")
     fig(bars, "Median across stations in each region. 100% = the 2000–2025 median for the same dates.")
     fig(cum, "Grey lines are 2000–2025, the dashed line is their median, red is 2026. A flat red line means little or no rain.")
     fig(maps.get("total_window"), f"September 1–{endlab}, same layout as the October map.")
@@ -290,15 +290,15 @@ def _html(cfg, h, reg, st, prov, maps, bars, cum, built) -> str:
         return f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table>"
 
     regdf = reg.reset_index().rename(columns={
-        "region": "Region", "n": "Stations", "sep": "September % normal", "oct": f"Oct 1–{end.day} % normal",
-        "window": f"Sep 1–{end:%b} {end.day} % normal", "driest30": "Driest 30 days % normal",
+        "region": "Region", "n": "Stations", "sep": "September % of ref. median", "oct": f"Oct 1–{end.day} % of ref. median",
+        "window": f"Sep 1–{end:%b} {end.day} % of ref. median", "driest30": "Driest 30 days % of ref. median",
         "oct_top3": "Stations with a top-3 driest October"})
     provdf = pd.DataFrame()
     if len(prov):
         provdf = pd.DataFrame({
             "Station": prov["name"].str.title(), "Region": prov["region"].astype(str).map(lambda r: REGION_LABEL.get(r, r)),
             f"Oct 1–{end.day} mm (at least)": prov["total_oct__value"],
-            "Oct % normal (at least)": prov["total_oct__pct_of_median"],
+            "Oct % of ref. median (at least)": prov["total_oct__pct_of_median"],
         })
     css = """
     :root{--ink:#0b0b0b;--ink2:#52514e;--rule:#e4e3df;--bg:#fcfcfb;--accent:#c23a39}

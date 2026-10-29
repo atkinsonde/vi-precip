@@ -45,7 +45,7 @@ def cats(b0: int):
         (f"Lowest since {b0}", "#8f2a2a", "white"),
         ("2nd or 3rd lowest", "#e34948", "white"),
         ("Among the lowest quarter", "#f6a8a2", INK),
-        ("Near normal (middle half)", "#f0efec", INK),
+        ("Near typical (middle half)", "#f0efec", INK),
         ("Higher than usual", "#6da7ec", INK),
     ]
 
