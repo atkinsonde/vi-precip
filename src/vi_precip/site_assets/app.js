@@ -461,12 +461,24 @@
       plot("s-daily", [{ type: "bar", x, y: q.daily, marker: { color: acc.map((a) => (a ? c.muted : c.accent)) }, hovertemplate: "%{x|%b %-d}: %{y:.1f} mm<extra></extra>" }],
         baseLayout({ xaxis: Object.assign(baseLayout().xaxis, { tickformat: "%b %-d", tickvals: [0, 14, 30, 44, 60].filter((k) => k < x.length).map((k) => x[k]) }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: "mm" } }) }));
     } else $("s-daily").innerHTML = '<div class="empty">–</div>';
+    $("s-temp-note").textContent = "";
     if (s.temp && s.temp.oct) {
       const t = s.temp.oct;
       plot("s-temp", [{ x: t.years, y: t.tmax, mode: "lines+markers", line: { color: c.target, width: 2 }, marker: { size: 6 }, name: "Tmax", hovertemplate: "%{x}: %{y:.1f} °C<extra>Tmax</extra>" },
         { x: t.years, y: t.tmin, mode: "lines+markers", line: { color: c.accent, width: 2 }, marker: { size: 6 }, name: "Tmin", hovertemplate: "%{x}: %{y:.1f} °C<extra>Tmin</extra>" }],
         baseLayout({ showlegend: true, legend: { orientation: "h", y: 1.12 }, yaxis: Object.assign(baseLayout().yaxis, { title: { text: `°C, ${M.oct_label}` } }) }));
-    } else $("s-temp").innerHTML = '<div class="empty">No temperature series for this station (too incomplete, or a joined record whose instrument change shifted temperatures).</div>';
+    } else if (s.temp_members && s.temp_members.length) {
+      // joined precipitation record whose temperature is not joined: one segment per station ID, not connected
+      const tr = [];
+      s.temp_members.forEach((m, k) => {
+        const t = m.oct, dash = k % 2 ? "dot" : "solid";
+        tr.push({ x: t.years, y: t.tmax, mode: "lines+markers", line: { color: c.target, width: 2, dash }, marker: { size: 6, symbol: k % 2 ? "square" : "circle" }, name: "Tmax " + m.id, hovertemplate: "%{x}: %{y:.1f} °C<extra>Tmax " + esc(m.id) + "</extra>" });
+        tr.push({ x: t.years, y: t.tmin, mode: "lines+markers", line: { color: c.accent, width: 2, dash }, marker: { size: 6, symbol: k % 2 ? "square" : "circle" }, name: "Tmin " + m.id, hovertemplate: "%{x}: %{y:.1f} °C<extra>Tmin " + esc(m.id) + "</extra>" });
+      });
+      plot("s-temp", tr, baseLayout({ showlegend: true, legend: { orientation: "h", y: 1.18, font: { size: 10.5 } }, yaxis: Object.assign(baseLayout().yaxis, { title: { text: `°C, ${M.oct_label}` } }),
+        margin: { l: 52, r: 14, t: 30, b: 40 } }));
+      $("s-temp-note").textContent = "Shown separately for each station ID: the instrument change at the ID switch shifted temperatures, so these records are not joined for temperature (they are for precipitation).";
+    } else $("s-temp").innerHTML = '<div class="empty">No temperature series for this station (fewer than the required complete years).</div>';
     // all-measures table
     const rows = P.metrics.map((mi) => {
       const g = P.values[mi.key + "|" + thr]; const i = u.i;

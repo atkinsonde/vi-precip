@@ -31,3 +31,13 @@ def test_site_build(cfg, tmp_path):
     assert en["grid"]["rho"] and en["summary"]["primary"]["short"]
     assert (out / "data" / "csv" / "enso_grid.csv").exists()
     assert "NaN" not in (out / "data" / "enso.js").read_text()
+
+
+def test_composite_station_shows_member_temperatures(cfg, tmp_path):
+    build_all(cfg)
+    out = tmp_path / "site"
+    site.run(cfg, out=out, synthetic=True)
+    comp = _load(out / "data" / "stations" / "C_1021830.js")  # joined for precipitation, not for temperature
+    assert "temp" not in comp and [m["id"] for m in comp["temp_members"]] == ["1021830", "1021831"]
+    plain = _load(out / "data" / "stations" / "1018610.js")
+    assert any(v is not None for v in plain["temp"]["oct"]["tmax"])

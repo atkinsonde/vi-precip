@@ -313,15 +313,28 @@ class SiteBuilder:
                     s[c] = v.round(2).tolist()
                 rec["series"][f"{thr:g}"] = s
             if tst is not None:
-                tg = tst[tst["unit_id"] == uid]
-                if len(tg):
+                def tser(tid):
+                    tg = tst[tst["unit_id"] == tid]
+                    if tg.empty:
+                        return None
                     ts = {}
                     for per in ("oct", "window"):
                         q = tg[tg["period"] == per].sort_values("year")
                         ts[per] = {"years": q["year"].tolist(),
                                    **{v: q[f"{v}_mean"].where(q[f"{v}_valid"].astype(bool)).round(2).tolist()
                                       for v in TEMP_VARS}}
+                    return ts if any(x is not None for x in ts["oct"]["tmax"]) else None
+
+                ts = tser(uid)
+                if ts:
                     rec["temp"] = ts
+                elif uid.startswith("C_"):
+                    # A precipitation composite that is not joined for temperature (instrument step at the ID
+                    # change): show each member's own record separately instead of one spliced series.
+                    mem = str(precip["units"]["members"][precip["units"]["unit_id"].index(uid)] or "").split(";")
+                    parts = [{"id": m, **t} for m in mem if (t := tser(m))]
+                    if parts:
+                        rec["temp_members"] = parts
             p = proc / f"{uid}.parquet"
             if p.exists():
                 d = pd.read_parquet(p)
